@@ -4,21 +4,10 @@ import os
 import hashlib
 import json
 from datetime import datetime
-import logging
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
+TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID')  # -1001234567890
 URL = 'https://www.ztoe.com.ua/unhooking-search.php'
-
-def get_subscribers():
-    """Завантажує список підписників"""
-    try:
-        with open('subscribers.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except FileNotFoundError:
-        return []
 
 def get_schedule_content():
     """Витягує важливе повідомлення з сайту"""
@@ -27,27 +16,34 @@ def get_schedule_content():
         response.encoding = 'windows-1251'
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Шукаємо блок з УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ!
-        for elem in soup.find_all(['div', 'span', 'p', 'h2', 'h3']):
-            text = elem.get_text(strip=True)
-            if 'УВАГА' in text and 'ВАЖЛИВА' in text:
-                logger.info(f"✅ Знайдено повідомлення")
-                return text
+        # Замінюємо <br> на \n ПЕРЕД витягуванням тексту
+        for br in soup.find_all('br'):
+            br.replace_with('\n')
         
-        logger.warning("⚠️ Повідомлення не знайдено")
+        # Шукаємо блок з "УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ!"
+        for elem in soup.find_all(['div', 'span', 'p', 'h2', 'h3']):
+            text = elem.get_text(strip=False)
+            if 'УВАГА' in text and 'ВАЖЛИВА' in text:
+                # Очищаємо зайві порожні рядки
+                lines = [line.strip() for line in text.split('\n') if line.strip()]
+                result = '\n'.join(lines)
+                print(f"✅ Знайдено повідомлення: {result[:100]}...")
+                return result
+        
+        print("⚠️ Повідомлення не знайдено")
         return None
         
     except Exception as e:
-        logger.error(f"❌ Помилка: {e}")
+        print(f"❌ Помилка: {e}")
         return None
 
 def get_last_hash():
     """Отримує останній хеш"""
     try:
         with open('last_hash.json', 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            return data.get('hash')
+            return json.load(f).get('hash')
     except:
+        print("⚠️ last_hash.json не знайдено (перший запуск)")
         return None
 
 def save_hash(content):
@@ -59,51 +55,64 @@ def save_hash(content):
             'content': content,
             'timestamp': datetime.now().isoformat()
         }, f, indent=2, ensure_ascii=False)
+    print(f"💾 Хеш збережено: {content_hash}")
     return content_hash
 
-def send_to_telegram(chat_id, message):
-    """Відправляє повідомлення"""
+def send_to_channel(message):
+    """Відправляє повідомлення в Telegram канал"""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     
     try:
         response = requests.post(url, json={
-            'chat_id': chat_id,
-            'text': message.replace('<br>', '\n').replace('<br/>', '\n'),
+            'chat_id': TELEGRAM_CHANNEL_ID,
+            'text': message,
             'parse_mode': 'HTML'
         }, timeout=10)
         
-        return response.status_code == 200
-    except:
+        if response.status_code == 200:
+            print("✅ Повідомлення відправлено в канал")
+            return True
+        else:
+            print(f"❌ Помилка Telegram API: {response.text}")
+            return False
+    except Exception as e:
+        print(f"❌ Помилка відправки: {e}")
         return False
 
 def main():
-    logger.info("🔍 Перевірка оновлень...")
+    print("=" * 50)
+    print("🔍 МОНІТОРИНГ ГРАФІКА ВІДКЛЮЧЕНЬ")
+    print("=" * 50)
     
+    # Отримуємо контент з сайту
     content = get_schedule_content()
     if not content:
+        print("❌ Не вдалося отримати контент")
         return
     
+    # Обчислюємо хеш
     current_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
     last_hash = get_last_hash()
     
+    print(f"🔑 Поточний хеш: {current_hash}")
+    print(f"🔑 Попередній хеш: {last_hash}")
+    
+    # Порівнюємо
     if last_hash == current_hash:
-        logger.info("✅ Змін немає")
+        print("✅ Змін немає. Завершення.")
         return
     
-    logger.info("🔔 ЗМІНИ ВИЯВЛЕНІ! Відправка...")
+    print("🔔 ВИЯВЛЕНІ ЗМІНИ!")
     
-    subscribers = get_subscribers()
-    if not subscribers:
-        logger.warning("⚠️ Немає підписників")
-        return
+    # Формуємо повідомлення
+    message = f"🔔 <b>ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ</b>\n\n{content}"
     
-    message = f"🔔 <b>ОНОВЛЕННЯ ГРАФІКА</b>\n\n{content}"
-    
-    for chat_id in subscribers:
-        send_to_telegram(chat_id, message)
-    
-    save_hash(content)
-    logger.info("✅ Готово!")
+    # Відправляємо в канал
+    if send_to_channel(message):
+        save_hash(content)
+        print("✅ Успішно!")
+    else:
+        print("❌ Не вдалося відправити")
 
 if __name__ == '__main__':
     main()
