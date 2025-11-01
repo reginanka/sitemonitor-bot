@@ -4,107 +4,106 @@ import os
 import hashlib
 import json
 from datetime import datetime
-import pytz
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
-TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 URL = 'https://www.ztoe.com.ua/unhooking-search.php'
 
-# Додаємо часовий пояс
-TIMEZONE = pytz.timezone('Europe/Kyiv')
+def get_subscribers():
+    """Завантажує список підписників"""
+    try:
+        with open('subscribers.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return []
 
 def get_schedule_content():
-    """Отримує HTML-контент з сайту та витягує розклад відключень"""
-    response = requests.get(URL)
-    response.encoding = 'windows-1251'
-    soup = BeautifulSoup(response.text, 'html.parser')
-    
-    important_header = soup.find('h2')
-    
-    if not important_header:
-        return None
-    
-    content_parts = [important_header.get_text(strip=True)]
-    current = important_header.next_sibling
-    
-    while current:
-        if hasattr(current, 'name'):
-            if current.name in ['table', 'form', 'h2', 'h3']:
-                break
-            elif current.name == 'br':
-                current = current.next_sibling
-                continue
-        else:
-            text = str(current).strip()
-            if text and 'Пошук' not in text and 'Оберіть' not in text:
-                content_parts.append(text)
-            elif 'Пошук' in text or 'Оберіть' in text:
-                break
-        
-        current = current.next_sibling
-    
-    result = '\n'.join(content_parts)
-    return result if len(result) > 50 else None
-
-def get_content_hash(content):
-    return hashlib.md5(content.encode('utf-8')).hexdigest()
-
-def load_previous_hash():
+    """Витягує важливе повідомлення з сайту"""
     try:
-        with open('last_hash.json', 'r') as f:
-            data = json.load(f)
-            return data.get('hash'), data.get('content')
-    except FileNotFoundError:
-        return None, None
+        response = requests.get(URL, timeout=10)
+        response.encoding = 'windows-1251'
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Шукаємо блок з УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ!
+        for elem in soup.find_all(['div', 'span', 'p', 'h2', 'h3']):
+            text = elem.get_text(strip=True)
+            if 'УВАГА' in text and 'ВАЖЛИВА' in text:
+                logger.info(f"✅ Знайдено повідомлення")
+                return text
+        
+        logger.warning("⚠️ Повідомлення не знайдено")
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ Помилка: {e}")
+        return None
 
-def save_hash(content_hash, content):
-    with open('last_hash.json', 'w') as f:
+def get_last_hash():
+    """Отримує останній хеш"""
+    try:
+        with open('last_hash.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            return data.get('hash')
+    except:
+        return None
+
+def save_hash(content):
+    """Зберігає хеш"""
+    content_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
+    with open('last_hash.json', 'w', encoding='utf-8') as f:
         json.dump({
             'hash': content_hash,
             'content': content,
-            'timestamp': datetime.now(TIMEZONE).isoformat()
-        }, f, ensure_ascii=False, indent=2)
+            'timestamp': datetime.now().isoformat()
+        }, f, indent=2, ensure_ascii=False)
+    return content_hash
 
-def send_telegram_message(message):
-    url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
-    payload = {
-        'chat_id': TELEGRAM_CHAT_ID,
-        'text': message,
-        'parse_mode': 'HTML'
-    }
-    response = requests.post(url, json=payload)
-    return response.json()
+def send_to_telegram(chat_id, message):
+    """Відправляє повідомлення"""
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    
+    try:
+        response = requests.post(url, json={
+            'chat_id': chat_id,
+            'text': message.replace('<br>', '\n').replace('<br/>', '\n'),
+            'parse_mode': 'HTML'
+        }, timeout=10)
+        
+        return response.status_code == 200
+    except:
+        return False
 
 def main():
-    print(f"Перевірка сайту: {URL}")
-    print(f"Час перевірки: {datetime.now(TIMEZONE).isoformat()}")
+    logger.info("🔍 Перевірка оновлень...")
     
-    current_content = get_schedule_content()
-    
-    if not current_content:
-        print("Не вдалося отримати контент з сайту")
+    content = get_schedule_content()
+    if not content:
         return
     
-    current_hash = get_content_hash(current_content)
-    previous_hash, previous_content = load_previous_hash()
+    current_hash = hashlib.md5(content.encode('utf-8')).hexdigest()
+    last_hash = get_last_hash()
     
-    print(f"Поточний хеш: {current_hash}")
-    print(f"Попередній хеш: {previous_hash}")
+    if last_hash == current_hash:
+        logger.info("✅ Змін немає")
+        return
     
-    if current_hash != previous_hash:
-        print("Виявлено зміни в розкладі!")
-        
-        message = f"🔔 <b>УВАГА! ОНОВЛЕННЯ РОЗКЛАДУ ВІДКЛЮЧЕНЬ</b>\n\n"
-        message += f"⏰ Час оновлення: {datetime.now(TIMEZONE).strftime('%d.%m.%Y %H:%M')}\n\n"
-        message += f"📋 <b>Новий розклад:</b>\n\n"
-        message += current_content[:4000]
-        
-        result = send_telegram_message(message)
-        print(f"Результат надсилання: {result}")
-        
-        save_hash(current_hash, current_content)
-    else:
-        print("Змін не виявлено")
+    logger.info("🔔 ЗМІНИ ВИЯВЛЕНІ! Відправка...")
+    
+    subscribers = get_subscribers()
+    if not subscribers:
+        logger.warning("⚠️ Немає підписників")
+        return
+    
+    message = f"🔔 <b>ОНОВЛЕННЯ ГРАФІКА</b>\n\n{content}"
+    
+    for chat_id in subscribers:
+        send_to_telegram(chat_id, message)
+    
+    save_hash(content)
+    logger.info("✅ Готово!")
 
 if __name__ == '__main__':
     main()
