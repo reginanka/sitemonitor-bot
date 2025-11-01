@@ -62,11 +62,18 @@ def send_to_channel(message):
     """Відправляє повідомлення в Telegram канал"""
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     
+    # Додаємо посилання на сайт внизу повідомлення
+    full_message = (
+        f"{message}\n\n"
+        f"➡️ <a href=\"https://www.ztoe.com.ua/unhooking-search.php\">Переглянути графік на сайті</a>"
+    )
+    
     try:
         response = requests.post(url, json={
             'chat_id': TELEGRAM_CHANNEL_ID,
-            'text': message,
-            'parse_mode': 'HTML'
+            'text': full_message,
+            'parse_mode': 'HTML',
+            'disable_web_page_preview': False  # Показувати превʼю сайту
         }, timeout=10)
         
         if response.status_code == 200:
