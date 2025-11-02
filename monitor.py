@@ -76,43 +76,36 @@ def save_hash(content):
     return content_hash
 
 def send_to_channel(message, screenshot_path=None):
-    """Відправляє повідомлення + скріншот в Telegram канал"""
-    
-    # Спочатку відправляємо текст
-    text_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    full_message = f"{message}\n\n➡️ <a href='{URL}'>Переглянути графік на сайті</a>"
+    """Відправляє скріншот + текст в одному повідомленні"""
     
     try:
-        response = requests.post(text_url, json={
-            'chat_id': TELEGRAM_CHANNEL_ID,
-            'text': full_message,
-            'parse_mode': 'HTML',
-            'disable_web_page_preview': True
-        }, timeout=10)
-        
-        if response.status_code != 200:
-            print(f"❌ Помилка надсилання тексту: {response.text}")
-            return False
-        
-        print("✅ Текстове повідомлення відправлено")
-        
-        # Якщо є скріншот - відправляємо фото
         if screenshot_path and os.path.exists(screenshot_path):
+            # Відправляємо фото з текстом як caption
             photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+            
+            full_message = f"{message}\n\n➡️ <a href='{URL}'>Переглянути графік на сайті</a>"
+            
             with open(screenshot_path, 'rb') as photo:
                 files = {'photo': photo}
-                data = {'chat_id': TELEGRAM_CHANNEL_ID}
-                photo_response = requests.post(photo_url, files=files, data=data, timeout=30)
+                data = {
+                    'chat_id': TELEGRAM_CHANNEL_ID,
+                    'caption': full_message,
+                    'parse_mode': 'HTML'
+                }
+                response = requests.post(photo_url, files=files, data=data, timeout=30)
                 
-                if photo_response.status_code == 200:
-                    print("✅ Скріншот відправлено")
+                if response.status_code == 200:
+                    print("✅ Фото + текст відправлено одним повідомленням")
+                    return True
                 else:
-                    print(f"⚠️ Не вдалося відправити скріншот: {photo_response.text}")
-        
-        return True
-        
+                    print(f"❌ Помилка: {response.text}")
+                    return False
+        else:
+            print("❌ Скріншот не знайдено")
+            return False
+            
     except Exception as e:
-        print(f"❌ Помилка відправки: {e}")
+        print(f"❌ Помилка: {e}")
         return False
 
 def main():
