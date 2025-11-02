@@ -4,6 +4,7 @@ import os
 import hashlib
 import json
 from datetime import datetime
+from playwright.sync_api import sync_playwright
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID')  # -1001234567890
@@ -16,7 +17,7 @@ def get_schedule_content():
         response.encoding = 'windows-1251'
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Замінюємо <br> на \n ПЕРЕД витягуванням тексту
+        # Замінюємо на \n ПЕРЕД витягуванням тексту
         for br in soup.find_all('br'):
             br.replace_with('\n')
         
@@ -32,9 +33,25 @@ def get_schedule_content():
         
         print("⚠️ Повідомлення не знайдено")
         return None
-        
+    
     except Exception as e:
         print(f"❌ Помилка: {e}")
+        return None
+
+def take_screenshot():
+    """Створює скріншот сайту"""
+    try:
+        print("📸 Створюю скріншот...")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': 1920, 'height': 1080})
+            page.goto(URL, wait_until='networkidle', timeout=30000)
+            page.screenshot(path='screenshot.png', full_page=True)
+            browser.close()
+            print("✅ Скріншот створено")
+            return 'screenshot.png'
+    except Exception as e:
+        print(f"❌ Помилка створення скріншоту: {e}")
         return None
 
 def get_last_hash():
@@ -58,30 +75,42 @@ def save_hash(content):
     print(f"💾 Хеш збережено: {content_hash}")
     return content_hash
 
-def send_to_channel(message):
-    """Відправляє повідомлення в Telegram канал"""
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+def send_to_channel(message, screenshot_path=None):
+    """Відправляє повідомлення + скріншот в Telegram канал"""
     
-    # Додаємо посилання на сайт внизу повідомлення
-    full_message = (
-        f"{message}\n\n"
-        f"➡️ <a href=\"https://www.ztoe.com.ua/unhooking-search.php\">Переглянути графік на сайті</a>"
-    )
+    # Спочатку відправляємо текст
+    text_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    full_message = f"{message}\n\n➡️ <a href='{URL}'>Переглянути графік на сайті</a>"
     
     try:
-        response = requests.post(url, json={
+        response = requests.post(text_url, json={
             'chat_id': TELEGRAM_CHANNEL_ID,
             'text': full_message,
             'parse_mode': 'HTML',
-            'disable_web_page_preview': False  # Показувати превʼю сайту
+            'disable_web_page_preview': True
         }, timeout=10)
         
-        if response.status_code == 200:
-            print("✅ Повідомлення відправлено в канал")
-            return True
-        else:
-            print(f"❌ Помилка Telegram API: {response.text}")
+        if response.status_code != 200:
+            print(f"❌ Помилка надсилання тексту: {response.text}")
             return False
+        
+        print("✅ Текстове повідомлення відправлено")
+        
+        # Якщо є скріншот - відправляємо фото
+        if screenshot_path and os.path.exists(screenshot_path):
+            photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+            with open(screenshot_path, 'rb') as photo:
+                files = {'photo': photo}
+                data = {'chat_id': TELEGRAM_CHANNEL_ID}
+                photo_response = requests.post(photo_url, files=files, data=data, timeout=30)
+                
+                if photo_response.status_code == 200:
+                    print("✅ Скріншот відправлено")
+                else:
+                    print(f"⚠️ Не вдалося відправити скріншот: {photo_response.text}")
+        
+        return True
+        
     except Exception as e:
         print(f"❌ Помилка відправки: {e}")
         return False
@@ -111,11 +140,14 @@ def main():
     
     print("🔔 ВИЯВЛЕНІ ЗМІНИ!")
     
+    # Створюємо скріншот
+    screenshot_path = take_screenshot()
+    
     # Формуємо повідомлення
-    message = f"🔔 <b>ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ</b>\n\n{content}"
+    message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n{content}"
     
     # Відправляємо в канал
-    if send_to_channel(message):
+    if send_to_channel(message, screenshot_path):
         save_hash(content)
         print("✅ Успішно!")
     else:
