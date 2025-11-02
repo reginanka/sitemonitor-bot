@@ -2,7 +2,7 @@ name: Monitor Schedule Updates
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Кожні 30 хвилин
+    - cron: '*/10 * * * *'  # Кожні 10 хвилин
   workflow_dispatch:  # Можна запускати вручну
 
 jobs:
