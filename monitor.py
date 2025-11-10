@@ -163,7 +163,7 @@ def main():
     log_messages.append("🔔 Виявлено зміни у важливому повідомленні.")
 
     screenshot_path = take_screenshot()
-    
+
     if send_to_channel(message_content, date_content, screenshot_path):
         save_hash(message_content, date_content)
         success_msg = "✅ Повідомлення з оновленням успішно відправлено в основний канал"
