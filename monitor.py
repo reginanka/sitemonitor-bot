@@ -102,7 +102,7 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
             photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
             
             # Формуємо повідомлення з обох блоків (дата в кінці)
-            full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n{message_content}\n\n➡️ Переглянути графік на сайті"
+            full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n{message_content}\n\n➡️ <a href='{URL}'>Переглянути графік на сайті</a>"
             
             if date_content:
                 full_message += f"\n\n{date_content}"
