@@ -8,6 +8,7 @@ from playwright.sync_api import sync_playwright
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID')
+TELEGRAM_LOG_CHANNEL_ID = os.environ.get('TELEGRAM_LOG_CHANNEL_ID') 
 URL = 'https://www.ztoe.com.ua/unhooking-search.php'
 
 def get_schedule_content():
@@ -166,3 +167,23 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+def send_log(message: str):
+    """Відправляє лог у лог-канал"""
+    if not TELEGRAM_LOG_CHANNEL_ID:
+        print("⚠️ TELEGRAM_LOG_CHANNEL_ID не визначено, лог не відправлено")
+        return
+    try:
+        log_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        data = {
+            'chat_id': TELEGRAM_LOG_CHANNEL_ID,
+            'text': message,
+            'parse_mode': 'HTML'
+        }
+        response = requests.post(log_url, data=data, timeout=10)
+        if response.status_code == 200:
+            print("✅ Лог відправлено")
+        else:
+            print(f"❌ Не вдалося відправити лог: {response.text}")
+    except Exception as e:
+        print(f"❌ Помилка при відправці логу: {e}")
