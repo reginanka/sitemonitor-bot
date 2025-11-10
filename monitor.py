@@ -133,57 +133,46 @@ def main():
     print("=" * 50)
     print("🔍 МОНІТОРИНГ ГРАФІКА ВІДКЛЮЧЕНЬ")
     print("=" * 50)
-    
-    # Отримуємо обидва блоки з сайту
+
+    log_messages = []
+    log_messages.append("🚀 Запущено моніторинг графіка відключень")
+
     message_content, date_content = get_schedule_content()
-    
     if not message_content:
-        print("❌ Не вдалося отримати важливе повідомлення")
+        error_msg = "❌ Не вдалося отримати важливе повідомлення"
+        print(error_msg)
+        log_messages.append(error_msg)
+        send_log(''.join(log_messages))
         return
-    
-    # Обчислюємо хеш ЛИШЕ важливого повідомлення
+
     current_hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest()
     last_hash_message = get_last_hash()
-    
-    print(f"🔑 Поточний хеш повідомлення: {current_hash_message}")
-    print(f"🔑 Попередній хеш повідомлення: {last_hash_message}")
-    
-    # Порівнюємо лише важливе повідомлення
+
+    log_messages.append(f"🔑 Поточний хеш повідомлення: {current_hash_message}")
+    log_messages.append(f"🔑 Попередній хеш повідомлення: {last_hash_message}")
+
     if last_hash_message == current_hash_message:
-        print("✅ Змін у важливому повідомленні немає. Завершення.")
+        msg = "✅ Змін у важливому повідомленні немає. Повідомлення в основний канал не надсилається."
+        print(msg)
+        log_messages.append(msg)
+        # Відправляємо лог навіть якщо змін немає
+        send_log(''.join(log_messages))
         return
-    
+
     print("🔔 ВИЯВЛЕНІ ЗМІНИ У ВАЖЛИВОМУ ПОВІДОМЛЕННІ!")
-    
-    # Створюємо скріншот
+    log_messages.append("🔔 Виявлено зміни у важливому повідомленні.")
+
     screenshot_path = take_screenshot()
     
-    # Відправляємо в канал
     if send_to_channel(message_content, date_content, screenshot_path):
         save_hash(message_content, date_content)
-        print("✅ Успішно!")
+        success_msg = "✅ Повідомлення з оновленням успішно відправлено в основний канал"
+        print(success_msg)
+        log_messages.append(success_msg)
     else:
-        print("❌ Не вдалося відправити")
+        fail_msg = "❌ Не вдалося відправити повідомлення в основний канал"
+        print(fail_msg)
+        log_messages.append(fail_msg)
 
-if __name__ == '__main__':
-    main()
-
-def send_log(message: str):
-    """Відправляє лог у лог-канал"""
-    if not TELEGRAM_LOG_CHANNEL_ID:
-        print("⚠️ TELEGRAM_LOG_CHANNEL_ID не визначено, лог не відправлено")
-        return
-    try:
-        log_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        data = {
-            'chat_id': TELEGRAM_LOG_CHANNEL_ID,
-            'text': message,
-            'parse_mode': 'HTML'
-        }
-        response = requests.post(log_url, data=data, timeout=10)
-        if response.status_code == 200:
-            print("✅ Лог відправлено")
-        else:
-            print(f"❌ Не вдалося відправити лог: {response.text}")
-    except Exception as e:
-        print(f"❌ Помилка при відправці логу: {e}")
+    # Завжди відправляємо лог у секретний канал в кінці
+    send_log(''.join(log_messages))
