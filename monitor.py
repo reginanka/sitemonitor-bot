@@ -44,9 +44,9 @@ def get_schedule_content():
             print("⚠️ Важливе повідомлення не знайдено")
         if not update_date:
             print("⚠️ Дата оновлення не знайдена")
-            
-        return important_message, update_date
         
+        return important_message, update_date
+    
     except Exception as e:
         print(f"❌ Помилка: {e}")
         return None, None
@@ -67,41 +67,38 @@ def take_screenshot():
         print(f"❌ Помилка створення скріншоту: {e}")
         return None
 
-def get_last_hashes():
-    """Отримує останні хеші обох блоків"""
+def get_last_hash():
+    """Отримує останній хеш важливого повідомлення"""
     try:
         with open('last_hash.json', 'r', encoding='utf-8') as f:
             data = json.load(f)
-            return data.get('hash_message'), data.get('hash_date')
+            return data.get('hash_message')
     except:
         print("⚠️ last_hash.json не знайдено (перший запуск)")
-        return None, None
+        return None
 
-def save_hashes(message_content, date_content):
-    """Зберігає хеші обох блоків"""
+def save_hash(message_content, date_content):
+    """Зберігає хеш лише важливого повідомлення"""
     hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest() if message_content else None
-    hash_date = hashlib.md5(date_content.encode('utf-8')).hexdigest() if date_content else None
     
     with open('last_hash.json', 'w', encoding='utf-8') as f:
         json.dump({
             'hash_message': hash_message,
-            'hash_date': hash_date,
             'content_message': message_content,
             'content_date': date_content,
             'timestamp': datetime.now().isoformat()
         }, f, indent=2, ensure_ascii=False)
     
     print(f"💾 Хеш повідомлення збережено: {hash_message}")
-    print(f"💾 Хеш дати збережено: {hash_date}")
-    return hash_message, hash_date
+    return hash_message
 
 def send_to_channel(message_content, date_content, screenshot_path=None):
-    """Відправляє скріншот + обидва тексти в одному повідомленні"""
+    """Відправляє повідомлення у форматі, який ви вказали"""
     try:
         if screenshot_path and os.path.exists(screenshot_path):
             photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
             
-            # Формуємо повідомлення з обох блоків (дата в кінці)
+            # Формуємо повідомлення у вашому форматі
             full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n{message_content}\n\n➡️ <a href='{URL}'>Переглянути графік на сайті</a>"
             
             if date_content:
@@ -126,7 +123,7 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
         else:
             print("❌ Скріншот не знайдено")
             return False
-            
+    
     except Exception as e:
         print(f"❌ Помилка: {e}")
         return False
@@ -139,41 +136,30 @@ def main():
     # Отримуємо обидва блоки з сайту
     message_content, date_content = get_schedule_content()
     
-    if not message_content and not date_content:
-        print("❌ Не вдалося отримати контент")
+    if not message_content:
+        print("❌ Не вдалося отримати важливе повідомлення")
         return
     
-    # Обчислюємо хеші
-    current_hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest() if message_content else None
-    current_hash_date = hashlib.md5(date_content.encode('utf-8')).hexdigest() if date_content else None
-    
-    last_hash_message, last_hash_date = get_last_hashes()
+    # Обчислюємо хеш ЛИШЕ важливого повідомлення
+    current_hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest()
+    last_hash_message = get_last_hash()
     
     print(f"🔑 Поточний хеш повідомлення: {current_hash_message}")
     print(f"🔑 Попередній хеш повідомлення: {last_hash_message}")
-    print(f"🔑 Поточний хеш дати: {current_hash_date}")
-    print(f"🔑 Попередній хеш дати: {last_hash_date}")
     
-    # Порівнюємо - якщо хоча б один змінився
-    message_changed = last_hash_message != current_hash_message
-    date_changed = last_hash_date != current_hash_date
-    
-    if not message_changed and not date_changed:
-        print("✅ Змін немає. Завершення.")
+    # Порівнюємо лише важливе повідомлення
+    if last_hash_message == current_hash_message:
+        print("✅ Змін у важливому повідомленні немає. Завершення.")
         return
     
-    print("🔔 ВИЯВЛЕНІ ЗМІНИ!")
-    if message_changed:
-        print("   📝 Змінилося важливе повідомлення")
-    if date_changed:
-        print("   📅 Змінилася дата оновлення")
+    print("🔔 ВИЯВЛЕНІ ЗМІНИ У ВАЖЛИВОМУ ПОВІДОМЛЕННІ!")
     
     # Створюємо скріншот
     screenshot_path = take_screenshot()
     
-    # Відправляємо в канал (обидва блоки разом)
+    # Відправляємо в канал
     if send_to_channel(message_content, date_content, screenshot_path):
-        save_hashes(message_content, date_content)
+        save_hash(message_content, date_content)
         print("✅ Успішно!")
     else:
         print("❌ Не вдалося відправити")
