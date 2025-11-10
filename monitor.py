@@ -142,7 +142,8 @@ def main():
         error_msg = "❌ Не вдалося отримати важливе повідомлення"
         print(error_msg)
         log_messages.append(error_msg)
-        send_log(''.join(log_messages))
+        send_log('
+'.join(log_messages))
         return
 
     current_hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest()
@@ -156,7 +157,8 @@ def main():
         print(msg)
         log_messages.append(msg)
         # Відправляємо лог навіть якщо змін немає
-        send_log(''.join(log_messages))
+        send_log('
+'.join(log_messages))
         return
 
     print("🔔 ВИЯВЛЕНІ ЗМІНИ У ВАЖЛИВОМУ ПОВІДОМЛЕННІ!")
@@ -175,4 +177,5 @@ def main():
         log_messages.append(fail_msg)
 
     # Завжди відправляємо лог у секретний канал в кінці
-    send_log(''.join(log_messages))
+    send_log('
+'.join(log_messages))
