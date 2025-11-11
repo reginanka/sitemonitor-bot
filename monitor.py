@@ -8,8 +8,41 @@ from playwright.sync_api import sync_playwright
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID')
-TELEGRAM_LOG_CHANNEL_ID = os.environ.get('TELEGRAM_LOG_CHANNEL_ID') 
+TELEGRAM_LOG_CHANNEL_ID = os.environ.get('TELEGRAM_LOG_CHANNEL_ID')
 URL = 'https://www.ztoe.com.ua/unhooking-search.php'
+
+# Змінна для збору логів
+log_messages = []
+
+def log(message):
+    """Додає повідомлення до логу та виводить у консоль"""
+    print(message)
+    log_messages.append(f"{datetime.now().strftime('%H:%M:%S')} - {message}")
+
+def send_log_to_channel():
+    """Відправляє зібрані логи у лог-канал"""
+    if not TELEGRAM_LOG_CHANNEL_ID or not log_messages:
+        return
+    
+    try:
+        log_text = "📊 <b>ЛОГ ВИКОНАННЯ СКРИПТА</b>\n\n"
+        log_text += "\n".join(log_messages)
+        log_text += f"\n\n⏰ Завершено: {datetime.now().strftime('%d.%m.%Y %H:%M:%S')}"
+        
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        data = {
+            'chat_id': TELEGRAM_LOG_CHANNEL_ID,
+            'text': log_text,
+            'parse_mode': 'HTML'
+        }
+        
+        response = requests.post(url, data=data, timeout=10)
+        if response.status_code == 200:
+            print("✅ Лог відправлено у лог-канал")
+        else:
+            print(f"❌ Помилка відправки логу: {response.text}")
+    except Exception as e:
+        print(f"❌ Помилка відправки логу: {e}")
 
 def get_schedule_content():
     """Витягує два блоки: важливе повідомлення та дату оновлення"""
@@ -33,39 +66,39 @@ def get_schedule_content():
             if 'УВАГА' in text and 'ВАЖЛИВА' in text and important_message is None:
                 lines = [line.strip() for line in text.split('\n') if line.strip()]
                 important_message = '\n'.join(lines)
-                print(f"✅ Знайдено важливе повідомлення: {important_message[:100]}...")
+                log(f"✅ Знайдено важливе повідомлення: {important_message[:100]}...")
             
             # Другий блок: дата оновлення
             if 'Дата оновлення інформації' in text and update_date is None:
                 lines = [line.strip() for line in text.split('\n') if line.strip()]
                 update_date = '\n'.join(lines)
-                print(f"✅ Знайдено дату оновлення: {update_date}")
+                log(f"✅ Знайдено дату оновлення: {update_date}")
         
         if not important_message:
-            print("⚠️ Важливе повідомлення не знайдено")
+            log("⚠️ Важливе повідомлення не знайдено")
         if not update_date:
-            print("⚠️ Дата оновлення не знайдена")
+            log("⚠️ Дата оновлення не знайдена")
         
         return important_message, update_date
     
     except Exception as e:
-        print(f"❌ Помилка: {e}")
+        log(f"❌ Помилка отримання контенту: {e}")
         return None, None
 
 def take_screenshot():
     """Створює скріншот сайту"""
     try:
-        print("📸 Створюю скріншот...")
+        log("📸 Створюю скріншот...")
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(viewport={'width': 1920, 'height': 1080})
             page.goto(URL, wait_until='networkidle', timeout=30000)
             page.screenshot(path='screenshot.png', full_page=True)
             browser.close()
-        print("✅ Скріншот створено")
+        log("✅ Скріншот створено")
         return 'screenshot.png'
     except Exception as e:
-        print(f"❌ Помилка створення скріншоту: {e}")
+        log(f"❌ Помилка створення скріншоту: {e}")
         return None
 
 def get_last_hash():
@@ -75,13 +108,12 @@ def get_last_hash():
             data = json.load(f)
             return data.get('hash_message')
     except:
-        print("⚠️ last_hash.json не знайдено (перший запуск)")
+        log("⚠️ last_hash.json не знайдено (перший запуск)")
         return None
 
 def save_hash(message_content, date_content):
     """Зберігає хеш лише важливого повідомлення"""
     hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest() if message_content else None
-    
     with open('last_hash.json', 'w', encoding='utf-8') as f:
         json.dump({
             'hash_message': hash_message,
@@ -89,8 +121,7 @@ def save_hash(message_content, date_content):
             'content_date': date_content,
             'timestamp': datetime.now().isoformat()
         }, f, indent=2, ensure_ascii=False)
-    
-    print(f"💾 Хеш повідомлення збережено: {hash_message}")
+    log(f"💾 Хеш повідомлення збережено: {hash_message}")
     return hash_message
 
 def send_to_channel(message_content, date_content, screenshot_path=None):
@@ -116,54 +147,64 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
                 response = requests.post(photo_url, files=files, data=data, timeout=30)
                 
                 if response.status_code == 200:
-                    print("✅ Фото + текст відправлено одним повідомленням")
+                    log("✅ Фото + текст відправлено у головний канал")
                     return True
                 else:
-                    print(f"❌ Помилка: {response.text}")
+                    log(f"❌ Помилка відправки у канал: {response.text}")
                     return False
         else:
-            print("❌ Скріншот не знайдено")
+            log("❌ Скріншот не знайдено")
             return False
     
     except Exception as e:
-        print(f"❌ Помилка: {e}")
+        log(f"❌ Помилка відправки у канал: {e}")
         return False
 
 def main():
-    print("=" * 50)
-    print("🔍 МОНІТОРИНГ ГРАФІКА ВІДКЛЮЧЕНЬ")
-    print("=" * 50)
+    log("=" * 50)
+    log("🔍 МОНІТОРИНГ ГРАФІКА ВІДКЛЮЧЕНЬ")
+    log("=" * 50)
     
-    # Отримуємо обидва блоки з сайту
-    message_content, date_content = get_schedule_content()
+    try:
+        # Отримуємо обидва блоки з сайту
+        message_content, date_content = get_schedule_content()
+        
+        if not message_content:
+            log("❌ Не вдалося отримати важливе повідомлення")
+            send_log_to_channel()
+            return
+        
+        # Обчислюємо хеш ЛИШЕ важливого повідомлення
+        current_hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest()
+        last_hash_message = get_last_hash()
+        
+        log(f"🔑 Поточний хеш повідомлення: {current_hash_message}")
+        log(f"🔑 Попередній хеш повідомлення: {last_hash_message}")
+        
+        # Порівнюємо лише важливе повідомлення
+        if last_hash_message == current_hash_message:
+            log("✅ Змін у важливому повідомленні немає. Завершення.")
+            send_log_to_channel()
+            return
+        
+        log("🔔 ВИЯВЛЕНІ ЗМІНИ У ВАЖЛИВОМУ ПОВІДОМЛЕННІ!")
+        
+        # Створюємо скріншот
+        screenshot_path = take_screenshot()
+        
+        # Відправляємо в канал
+        if send_to_channel(message_content, date_content, screenshot_path):
+            save_hash(message_content, date_content)
+            log("✅ Успішно! Оновлення відправлено")
+        else:
+            log("❌ Не вдалося відправити оновлення")
     
-    if not message_content:
-        print("❌ Не вдалося отримати важливе повідомлення")
-        return
+    except Exception as e:
+        log(f"❌ Критична помилка: {e}")
     
-    # Обчислюємо хеш ЛИШЕ важливого повідомлення
-    current_hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest()
-    last_hash_message = get_last_hash()
-    
-    print(f"🔑 Поточний хеш повідомлення: {current_hash_message}")
-    print(f"🔑 Попередній хеш повідомлення: {last_hash_message}")
-    
-    # Порівнюємо лише важливе повідомлення
-    if last_hash_message == current_hash_message:
-        print("✅ Змін у важливому повідомленні немає. Завершення.")
-        return
-    
-    print("🔔 ВИЯВЛЕНІ ЗМІНИ У ВАЖЛИВОМУ ПОВІДОМЛЕННІ!")
-    
-    # Створюємо скріншот
-    screenshot_path = take_screenshot()
-    
-    # Відправляємо в канал
-    if send_to_channel(message_content, date_content, screenshot_path):
-        save_hash(message_content, date_content)
-        print("✅ Успішно!")
-    else:
-        print("❌ Не вдалося відправити")
+    finally:
+        # Завжди відправляємо лог наприкінці
+        send_log_to_channel()
 
 if __name__ == '__main__':
     main()
