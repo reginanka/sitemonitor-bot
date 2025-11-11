@@ -24,7 +24,8 @@ def get_ukraine_time():
 def log(message):
     """Додає повідомлення до логу та виводить у консоль"""
     print(message)
-    log_messages.append(f"{datetime.now().strftime('%H:%M:%S')} - {message}")
+    ukraine_time = get_ukraine_time()
+    log_messages.append(f"{ukraine_time.strftime('%H:%M:%S')} - {message}")
 
 def send_log_to_channel():
     """Відправляє зібрані логи у лог-канал"""
