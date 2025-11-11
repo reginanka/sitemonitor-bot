@@ -17,6 +17,10 @@ UKRAINE_TZ = pytz.timezone('Europe/Kyiv')
 # Змінна для збору логів
 log_messages = []
 
+def get_ukraine_time():
+    """Повертає поточний час в українському часовому поясі"""
+    return datetime.now(pytz.utc).astimezone(UKRAINE_TZ)
+
 def log(message):
     """Додає повідомлення до логу та виводить у консоль"""
     print(message)
