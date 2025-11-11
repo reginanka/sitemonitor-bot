@@ -11,6 +11,8 @@ TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID')
 TELEGRAM_LOG_CHANNEL_ID = os.environ.get('TELEGRAM_LOG_CHANNEL_ID')
 URL = 'https://www.ztoe.com.ua/unhooking-search.php'
 
+# Часовий пояс України
+UKRAINE_TZ = pytz.timezone('Europe/Kyiv')
 # Змінна для збору логів
 log_messages = []
 
