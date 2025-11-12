@@ -6,6 +6,15 @@ import json
 from datetime import datetime
 import pytz
 from playwright.sync_api import sync_playwright
+import sys
+
+def exception_hook(exctype, value, traceback):
+    print(f"❌ Uncaught exception: {value}")
+    import traceback as tb
+    tb.print_exception(exctype, value, traceback)
+    sys.exit(1)
+
+sys.excepthook = exception_hook
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID')
