@@ -43,17 +43,11 @@ def send_log_to_channel():
     
     try:
         ukraine_time = get_ukraine_time()
-        log_text = "📊 <b>ЛОГ ВИКОНАННЯ СКРИПТА</b>
-
-"
-log_text += "<pre>"
-log_text += "
-".join(log_messages)
-log_text += "</pre>"
-log_text += f"
-
-⏰ Завершено: {get_ukraine_time().strftime('%d.%m.%Y %H:%M:%S')} (Київський час)"
-
+        log_text = "📊 <b>ЛОГ ВИКОНАННЯ СКРИПТА</b>\n\n"
+        log_text += "<pre>"
+        log_text += "\n".join(log_messages)
+        log_text += "</pre>"
+        log_text += f"\n\n⏰ Завершено: {get_ukraine_time().strftime('%d.%m.%Y %H:%M:%S')} (Київський час)"
         
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         data = {
@@ -63,12 +57,15 @@ log_text += f"
         }
         
         response = requests.post(url, data=data, timeout=10)
+        
         if response.status_code == 200:
             print("✅ Лог відправлено у лог-канал")
         else:
             print(f"❌ Помилка відправки логу: {response.text}")
+            
     except Exception as e:
         print(f"❌ Помилка відправки логу: {e}")
+
 
 def get_schedule_content():
     """Витягує важливе повідомлення та дату оновлення через Playwright браузер"""
