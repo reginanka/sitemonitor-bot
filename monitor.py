@@ -151,22 +151,18 @@ def save_hash(message_content, date_content):
     return hash_message
 
 def send_to_channel(message_content, date_content, screenshot_path=None):
-    """Відправляє повідомлення у форматі, який ви вказали"""
+    """Відправляє повідомлення з скріншотом у канал"""
     try:
         if screenshot_path and os.path.exists(screenshot_path):
             photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
             
-            # Формуємо повідомлення у вашому форматі
-            full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ
-
-{message_content}
-
-➡️ <a href='{URL}'>Переглянути графік на сайті</a>"
+            # Формуємо повідомлення
+            full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n"
+            full_message += message_content
+            full_message += f'\n\n<a href="{URL}">🔗 Пошук черги за адресою</a>'
             
             if date_content:
-                full_message += f"
-
-{date_content}"
+                full_message += f"\n\n{date_content}"
             
             with open(screenshot_path, 'rb') as photo:
                 files = {'photo': photo}
@@ -179,18 +175,19 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
                 response = requests.post(photo_url, files=files, data=data, timeout=30)
                 
                 if response.status_code == 200:
-                    log("✅ Фото + текст відправлено у головний канал")
+                    log("✅ Повідомлення відправлено у канал")
                     return True
                 else:
-                    log(f"❌ Помилка відправки у канал: {response.text}")
+                    log(f"❌ Помилка відправки: {response.text}")
                     return False
         else:
-            log("❌ Скріншот не знайдено")
+            log("⚠️ Скріншот не знайдено")
             return False
-    
+            
     except Exception as e:
-        log(f"❌ Помилка відправки у канал: {e}")
+        log(f"❌ Помилка відправки: {e}")
         return False
+
 
 def main():
     log("=" * 50)
