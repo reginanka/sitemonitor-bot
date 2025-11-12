@@ -58,7 +58,10 @@ def send_log_to_channel():
 def get_schedule_content():
     """Витягує два блоки: важливе повідомлення та дату оновлення"""
     try:
-        response = requests.get(URL, timeout=10)
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
+        }
+        response = requests.get(URL, headers=headers, timeout=10)
         response.encoding = 'windows-1251'
         soup = BeautifulSoup(response.text, 'html.parser')
         
