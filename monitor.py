@@ -56,36 +56,36 @@ def send_log_to_channel():
         print(f"❌ Помилка відправки логу: {e}")
 
 def get_schedule_content():
-    """Витягує два блоки: важливе повідомлення та дату оновлення"""
+    """Витягує важливе повідомлення та дату оновлення через Playwright браузер"""
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36'
-        }
-        response = requests.get(URL, headers=headers, timeout=10)
-        response.encoding = 'windows-1251'
-        soup = BeautifulSoup(response.text, 'html.parser')
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': 1920, 'height': 1080})
+            page.goto(URL, wait_until='networkidle', timeout=30000)
+            page_content = page.content()
+            browser.close()
         
-        # Замінюємо <br> на \n
+        soup = BeautifulSoup(page_content, 'html.parser')
         for br in soup.find_all('br'):
-            br.replace_with('\n')
+            br.replace_with('
+')
         
         important_message = None
         update_date = None
         
-        # Шукаємо блок з "УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ!"
         for elem in soup.find_all(['div', 'span', 'p', 'h2', 'h3']):
             text = elem.get_text(strip=False)
-            
-            # Перший блок: важливе повідомлення
             if 'УВАГА' in text and 'ВАЖЛИВА' in text and important_message is None:
-                lines = [line.strip() for line in text.split('\n') if line.strip()]
-                important_message = '\n'.join(lines)
+                lines = [line.strip() for line in text.split('
+') if line.strip()]
+                important_message = '
+'.join(lines)
                 log(f"✅ Знайдено важливе повідомлення: {important_message[:100]}...")
-            
-            # Другий блок: дата оновлення
             if 'Дата оновлення інформації' in text and update_date is None:
-                lines = [line.strip() for line in text.split('\n') if line.strip()]
-                update_date = '\n'.join(lines)
+                lines = [line.strip() for line in text.split('
+') if line.strip()]
+                update_date = '
+'.join(lines)
                 log(f"✅ Знайдено дату оновлення: {update_date}")
         
         if not important_message:
@@ -94,9 +94,9 @@ def get_schedule_content():
             log("⚠️ Дата оновлення не знайдена")
         
         return important_message, update_date
-    
+
     except Exception as e:
-        log(f"❌ Помилка отримання контенту: {e}")
+        log(f"❌ Помилка отримання контенту через Playwright: {e}")
         return None, None
 
 def take_screenshot():
