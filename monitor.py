@@ -34,11 +34,16 @@ def send_log_to_channel():
     
     try:
         ukraine_time = get_ukraine_time()
-        log_text = "📊 <b>ЛОГ ВИКОНАННЯ СКРИПТА</b>\n\n"
+        log_text = "📊 <b>ЛОГ ВИКОНАННЯ СКРИПТА</b>
+
+"
         log_text += "<pre>"
-        log_text += "\n".join(log_messages)
+        log_text += "
+".join(log_messages)
         log_text += "</pre>"
-        log_text += f"\n\n⏰ Завершено: {ukraine_time.strftime('%d.%m.%Y %H:%M:%S')} (Київський час)"
+        log_text += f"
+
+⏰ Завершено: {ukraine_time.strftime('%d.%m.%Y %H:%M:%S')} (Київський час)"
         
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
         data = {
@@ -145,10 +150,16 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
             photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
             
             # Формуємо повідомлення у вашому форматі
-            full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n{message_content}\n\n➡️ <a href='{URL}'>Переглянути графік на сайті</a>"
+            full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ
+
+{message_content}
+
+➡️ <a href='{URL}'>Переглянути графік на сайті</a>"
             
             if date_content:
-                full_message += f"\n\n{date_content}"
+                full_message += f"
+
+{date_content}"
             
             with open(screenshot_path, 'rb') as photo:
                 files = {'photo': photo}
