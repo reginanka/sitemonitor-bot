@@ -68,47 +68,47 @@ def send_log_to_channel():
 
 
 def get_schedule_content():
-    """Витягує важливе повідомлення та дату оновлення через Playwright браузер"""
+    """Отримує контент розкладу з використанням Playwright"""
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(viewport={'width': 1920, 'height': 1080})
             page.goto(URL, wait_until='networkidle', timeout=30000)
+            
             page_content = page.content()
             browser.close()
-        
-        soup = BeautifulSoup(page_content, 'html.parser')
-        for br in soup.find_all('br'):
-            br.replace_with('
-')
-        
-        important_message = None
-        update_date = None
-        
-        for elem in soup.find_all(['div', 'span', 'p', 'h2', 'h3']):
-            text = elem.get_text(strip=False)
-            if 'УВАГА' in text and 'ВАЖЛИВА' in text and important_message is None:
-                lines = [line.strip() for line in text.split('
-') if line.strip()]
-                important_message = '
-'.join(lines)
-                log(f"✅ Знайдено важливе повідомлення: {important_message[:100]}...")
-            if 'Дата оновлення інформації' in text and update_date is None:
-                lines = [line.strip() for line in text.split('
-') if line.strip()]
-                update_date = '
-'.join(lines)
-                log(f"✅ Знайдено дату оновлення: {update_date}")
-        
-        if not important_message:
-            log("⚠️ Важливе повідомлення не знайдено")
-        if not update_date:
-            log("⚠️ Дата оновлення не знайдена")
-        
-        return important_message, update_date
-
+            
+            soup = BeautifulSoup(page_content, 'html.parser')
+            
+            # Замінюємо <br> на перенос рядка
+            for br in soup.find_all('br'):
+                br.replace_with('\n')
+            
+            important_message = None
+            update_date = None
+            
+            for elem in soup.find_all(['div', 'span', 'p', 'h2', 'h3']):
+                text = elem.get_text(strip=False)
+                
+                if 'УВАГА' in text and 'ІНФОРМАЦІЯ' in text and important_message is None:
+                    lines = [line.strip() for line in text.split('\n') if line.strip()]
+                    important_message = '\n'.join(lines)
+                    log(f"✅ Знайдено повідомлення: {important_message[:100]}...")
+                
+                if 'Дата оновлення інформації' in text and update_date is None:
+                    lines = [line.strip() for line in text.split('\n') if line.strip()]
+                    update_date = '\n'.join(lines)
+                    log(f"✅ Знайдено дату: {update_date}")
+            
+            if not important_message:
+                log("⚠️ Повідомлення не знайдено")
+            if not update_date:
+                log("⚠️ Дата не знайдена")
+                
+            return important_message, update_date
+            
     except Exception as e:
-        log(f"❌ Помилка отримання контенту через Playwright: {e}")
+        log(f"❌ Помилка Playwright: {e}")
         return None, None
 
 def take_screenshot():
