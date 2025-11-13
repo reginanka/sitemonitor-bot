@@ -85,24 +85,78 @@ def get_schedule_content():
         for br in soup.find_all("br"):
             br.replace_with("\n")
         
-        # Шукаємо повідомлення
-        message_div = soup.find('div', class_='message')
-        if not message_div:
-            log("⚠️ Не знайдено div з класом 'message'")
-            return None, None
+        # Шукаємо текст "УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ!" різними способами
+        message_text = None
         
-        # Отримуємо текст повідомлення
-        message_text = message_div.get_text(separator='\n', strip=True)
+        # Спосіб 1: Шукаємо текст безпосередньо
+        attention_element = soup.find(string=lambda text: text and 'УВАГА! ВАЖЛИВА ІНФОРМАЦІЯ!' in text)
+        
+        if attention_element:
+            # Знаходимо батьківський елемент
+            parent = attention_element.parent
+            
+            # Перевіряємо різні варіанти батьківських елементів
+            if parent.name in ['p', 'div', 'td', 'th']:
+                container = parent
+            else:
+                container = parent.find_parent(['p', 'div', 'td', 'th', 'center'])
+            
+            if container:
+                message_text = container.get_text(separator='\n', strip=True)
+                log(f"✅ Знайдено текст повідомлення через пошук тексту")
+        
+        # Спосіб 2: Якщо не знайшли, шукаємо по тегу center (часто використовується)
+        if not message_text:
+            center_element = soup.find('center')
+            if center_element:
+                # Беремо текст до першої таблиці
+                text_parts = []
+                for element in center_element.children:
+                    if element.name == 'table':
+                        break
+                    if isinstance(element, str):
+                        text_parts.append(element.strip())
+                    else:
+                        text_parts.append(element.get_text(strip=True))
+                
+                message_text = '\n'.join([t for t in text_parts if t])
+                if message_text:
+                    log(f"✅ Знайдено текст повідомлення через <center>")
+        
+        # Спосіб 3: Шукаємо будь-який текст перед таблицею
+        if not message_text:
+            first_table = soup.find('table')
+            if first_table:
+                # Отримуємо всі елементи перед таблицею
+                all_text = []
+                for element in first_table.find_all_previous():
+                    text = element.get_text(strip=True)
+                    if 'УВАГА' in text:
+                        all_text.append(text)
+                        break
+                
+                if all_text:
+                    message_text = '\n'.join(all_text)
+                    log(f"✅ Знайдено текст повідомлення перед таблицею")
+        
+        if not message_text:
+            log("⚠️ Не вдалося знайти текст повідомлення")
+            # Для debug - виводимо початок HTML
+            log(f"DEBUG: Початок HTML: {str(soup)[:500]}")
+            return None, None
         
         # Знаходимо дату оновлення
         date_text = soup.find(string=lambda text: text and 'Дата оновлення інформації' in text)
         date_content = date_text.strip() if date_text else "Дата не знайдена"
         
         log(f"✅ Отримано контент ({len(message_text)} символів)")
+        log(f"📝 Перші 100 символів: {message_text[:100]}")
         return message_text, date_content
         
     except Exception as e:
         log(f"❌ Помилка отримання контенту: {e}")
+        import traceback
+        log(f"Traceback: {traceback.format_exc()}")
         return None, None
 
 def take_table_screenshot():
