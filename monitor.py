@@ -6,6 +6,8 @@ import json
 from datetime import datetime
 import pytz
 from playwright.sync_api import sync_playwright
+from PIL import Image
+import io
 import sys
 
 def exception_hook(exctype, value, traceback):
@@ -23,6 +25,7 @@ URL = 'https://www.ztoe.com.ua/unhooking-search.php'
 
 # Часовий пояс України
 UKRAINE_TZ = pytz.timezone('Europe/Kyiv')
+
 # Змінна для збору логів
 log_messages = []
 
@@ -57,7 +60,6 @@ def send_log_to_channel():
         }
         
         response = requests.post(url, data=data, timeout=10)
-        
         if response.status_code == 200:
             print("✅ Лог відправлено у лог-канал")
         else:
@@ -65,7 +67,6 @@ def send_log_to_channel():
             
     except Exception as e:
         print(f"❌ Помилка відправки логу: {e}")
-
 
 def get_schedule_content():
     """Отримує контент розкладу з використанням Playwright"""
@@ -78,160 +79,262 @@ def get_schedule_content():
             page_content = page.content()
             browser.close()
             
-            soup = BeautifulSoup(page_content, 'html.parser')
-            
-            # Замінюємо <br> на перенос рядка
-            for br in soup.find_all('br'):
-                br.replace_with('\n')
-            
-            important_message = None
-            update_date = None
-            
-            for elem in soup.find_all(['div', 'span', 'p', 'h2', 'h3']):
-                text = elem.get_text(strip=False)
-                
-                if 'УВАГА' in text and 'ІНФОРМАЦІЯ' in text and important_message is None:
-                    lines = [line.strip() for line in text.split('\n') if line.strip()]
-                    important_message = '\n'.join(lines)
-                    log(f"✅ Знайдено повідомлення: {important_message[:100]}...")
-                
-                if 'Дата оновлення інформації' in text and update_date is None:
-                    lines = [line.strip() for line in text.split('\n') if line.strip()]
-                    update_date = '\n'.join(lines)
-                    log(f"✅ Знайдено дату: {update_date}")
-            
-            if not important_message:
-                log("⚠️ Повідомлення не знайдено")
-            if not update_date:
-                log("⚠️ Дата не знайдена")
-                
-            return important_message, update_date
-            
+        soup = BeautifulSoup(page_content, 'html.parser')
+        
+        # Замінюємо <br> на перенос рядка
+        for br in soup.find_all("br"):
+            br.replace_with("\n")
+        
+        # Шукаємо повідомлення
+        message_div = soup.find('div', class_='message')
+        if not message_div:
+            log("⚠️ Не знайдено div з класом 'message'")
+            return None, None
+        
+        # Отримуємо текст повідомлення
+        message_text = message_div.get_text(separator='\n', strip=True)
+        
+        # Знаходимо дату оновлення
+        date_text = soup.find(string=lambda text: text and 'Дата оновлення інформації' in text)
+        date_content = date_text.strip() if date_text else "Дата не знайдена"
+        
+        log(f"✅ Отримано контент ({len(message_text)} символів)")
+        return message_text, date_content
+        
     except Exception as e:
-        log(f"❌ Помилка Playwright: {e}")
+        log(f"❌ Помилка отримання контенту: {e}")
         return None, None
 
-def take_screenshot():
-    """Створює скріншот сайту"""
+def take_table_screenshot():
+    """Робить скріншот обох графіків (сьогодні + завтра)"""
     try:
-        log("📸 Створюю скріншот...")
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(viewport={'width': 1920, 'height': 1080})
             page.goto(URL, wait_until='networkidle', timeout=30000)
-            page.screenshot(path='screenshot.png', full_page=True)
+            
+            # Знаходимо всі таблиці
+            tables = page.locator('table')
+            table_count = tables.count()
+            log(f"📊 Знайдено таблиць: {table_count}")
+            
+            if table_count == 0:
+                browser.close()
+                return None
+            
+            # Визначаємо скільки таблиць з графіками
+            # Остання таблиця - це роз'яснення (вона маленька)
+            graph_count = table_count - 1  # всі таблиці крім останньої
+            
+            # Перевіряємо розмір останньої таблиці для підтвердження
+            if table_count >= 2:
+                last_table = tables.nth(table_count - 1)
+                last_box = last_table.bounding_box()
+                
+                # Якщо остання таблиця низька (менше 200px) - це точно роз'яснення
+                if last_box and last_box['height'] < 200:
+                    log(f"📋 Таблиця роз'яснень виявлена")
+                else:
+                    # Якщо остання таблиця велика - це теж графік
+                    graph_count = table_count
+                    log(f"📊 Всі таблиці - графіки")
+            
+            log(f"📊 Графіків для захоплення: {graph_count}")
+            
+            # Робимо скріншот графіків
+            screenshots = []
+            for i in range(graph_count):
+                screenshot_bytes = tables.nth(i).screenshot()
+                screenshots.append(Image.open(io.BytesIO(screenshot_bytes)))
+                log(f"✅ Захоплено графік {i+1}")
+            
             browser.close()
-        log("✅ Скріншот створено")
-        return 'screenshot.png'
+            
+            # Якщо один графік - повертаємо як є
+            if len(screenshots) == 1:
+                img_bytes = io.BytesIO()
+                screenshots[0].save(img_bytes, format='PNG')
+                return img_bytes.getvalue()
+            
+            # Якщо два графіки (сьогодні + завтра) - об'єднуємо вертикально
+            total_width = max(img.width for img in screenshots)
+            total_height = sum(img.height for img in screenshots) + (20 * (len(screenshots) - 1))
+            
+            combined = Image.new('RGB', (total_width, total_height), 'white')
+            
+            y_offset = 0
+            for img in screenshots:
+                combined.paste(img, (0, y_offset))
+                y_offset += img.height + 20  # 20px відступ між графіками
+            
+            img_bytes = io.BytesIO()
+            combined.save(img_bytes, format='PNG')
+            return img_bytes.getvalue()
+            
     except Exception as e:
-        log(f"❌ Помилка створення скріншоту: {e}")
+        log(f"❌ Помилка скріншота таблиць: {e}")
         return None
 
-def get_last_hash():
-    """Отримує останній хеш важливого повідомлення"""
+def crop_date_area(screenshot_bytes):
+    """Обрізає область з датою оновлення зі скріншота"""
+    try:
+        img = Image.open(io.BytesIO(screenshot_bytes))
+        width, height = img.size
+        
+        # Обрізаємо нижні 100 пікселів де знаходиться дата оновлення
+        cropped = img.crop((0, 0, width, height - 100))
+        
+        img_bytes = io.BytesIO()
+        cropped.save(img_bytes, format='PNG')
+        return img_bytes.getvalue()
+    except Exception as e:
+        log(f"❌ Помилка обрізання: {e}")
+        return screenshot_bytes
+
+def get_table_hash(screenshot_bytes):
+    """Обчислює хеш зображення таблиці"""
+    if not screenshot_bytes:
+        return None
+    return hashlib.md5(screenshot_bytes).hexdigest()
+
+def take_screenshot():
+    """Робить повний скріншот сторінки для відправки"""
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={'width': 1920, 'height': 1080})
+            page.goto(URL, wait_until='networkidle', timeout=30000)
+            
+            screenshot_path = 'screenshot.png'
+            page.screenshot(path=screenshot_path, full_page=True)
+            
+            browser.close()
+            log(f"✅ Скріншот збережено: {screenshot_path}")
+            return screenshot_path
+            
+    except Exception as e:
+        log(f"❌ Помилка створення скріншота: {e}")
+        return None
+
+def send_to_channel(message_content, date_content, screenshot_path):
+    """Відправляє повідомлення та скріншот у Telegram канал"""
+    try:
+        ukraine_time = get_ukraine_time()
+        formatted_message = (
+            f"🔔 <b>ОНОВЛЕННЯ ГРАФІКУ ВІДКЛЮЧЕНЬ</b>\n\n"
+            f"{message_content}\n\n"
+            f"📅 {date_content}\n"
+            f"⏰ Виявлено: {ukraine_time.strftime('%d.%m.%Y %H:%M:%S')} (Київський час)"
+        )
+        
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+        
+        with open(screenshot_path, 'rb') as photo:
+            files = {'photo': photo}
+            data = {
+                'chat_id': TELEGRAM_CHANNEL_ID,
+                'caption': formatted_message,
+                'parse_mode': 'HTML'
+            }
+            
+            response = requests.post(url, data=data, files=files, timeout=30)
+            
+            if response.status_code == 200:
+                log("✅ Повідомлення успішно відправлено у канал")
+                return True
+            else:
+                log(f"❌ Помилка відправки: {response.text}")
+                return False
+                
+    except Exception as e:
+        log(f"❌ Помилка відправки у Telegram: {e}")
+        return False
+
+def get_last_hashes():
+    """Завантажує збережені хеші"""
     try:
         with open('last_hash.json', 'r', encoding='utf-8') as f:
             data = json.load(f)
-            return data.get('hash_message')
+            return {
+                'hash_message': data.get('hash_message'),
+                'hash_table': data.get('hash_table')
+            }
     except:
-        log("⚠️ last_hash.json не знайдено (перший запуск)")
-        return None
+        return {'hash_message': None, 'hash_table': None}
 
-def save_hash(message_content, date_content):
-    """Зберігає хеш лише важливого повідомлення"""
-    hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest() if message_content else None
+def save_hashes(message_content, date_content, table_hash):
+    """Зберігає обидва хеші"""
+    hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest()
+    
     with open('last_hash.json', 'w', encoding='utf-8') as f:
         json.dump({
             'hash_message': hash_message,
+            'hash_table': table_hash,
             'content_message': message_content,
             'content_date': date_content,
             'timestamp': datetime.now().isoformat()
         }, f, indent=2, ensure_ascii=False)
-    log(f"💾 Хеш повідомлення збережено: {hash_message}")
-    return hash_message
-
-def send_to_channel(message_content, date_content, screenshot_path=None):
-    """Відправляє повідомлення з скріншотом у канал"""
-    try:
-        if screenshot_path and os.path.exists(screenshot_path):
-            photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
-            
-            # Формуємо повідомлення
-            full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n"
-            full_message += message_content
-            full_message += f'\n\n<a href="{URL}">🔗 Пошук черги за адресою</a>'
-            
-            if date_content:
-                full_message += f"\n\n{date_content}"
-            
-            with open(screenshot_path, 'rb') as photo:
-                files = {'photo': photo}
-                data = {
-                    'chat_id': TELEGRAM_CHANNEL_ID,
-                    'caption': full_message,
-                    'parse_mode': 'HTML'
-                }
-                
-                response = requests.post(photo_url, files=files, data=data, timeout=30)
-                
-                if response.status_code == 200:
-                    log("✅ Повідомлення відправлено у канал")
-                    return True
-                else:
-                    log(f"❌ Помилка відправки: {response.text}")
-                    return False
-        else:
-            log("⚠️ Скріншот не знайдено")
-            return False
-            
-    except Exception as e:
-        log(f"❌ Помилка відправки: {e}")
-        return False
-
 
 def main():
     log("=" * 50)
-    log("🔍 МОНІТОРИНГ ГРАФІКА ВІДКЛЮЧЕНЬ")
+    log("🔍 ЗАПУСК МОНІТОРИНГУ РОЗКЛАДУ")
     log("=" * 50)
     
     try:
-        # Отримуємо обидва блоки з сайту
+        # Отримуємо текст
         message_content, date_content = get_schedule_content()
-        
         if not message_content:
-            log("❌ Не вдалося отримати важливе повідомлення")
+            log("⚠️ Не вдалося отримати контент")
             return
         
-        # Обчислюємо хеш ЛИШЕ важливого повідомлення
+        # Отримуємо скріншот таблиці
+        table_screenshot = take_table_screenshot()
+        if not table_screenshot:
+            log("⚠️ Не вдалося отримати скріншот таблиці")
+            return
+        
+        # Обрізаємо дату зі скріншота
+        table_screenshot_no_date = crop_date_area(table_screenshot)
+        
+        # Обчислюємо хеші
         current_hash_message = hashlib.md5(message_content.encode('utf-8')).hexdigest()
-        last_hash_message = get_last_hash()
+        current_hash_table = get_table_hash(table_screenshot_no_date)
         
-        log(f"🔑 Поточний хеш повідомлення: {current_hash_message}")
-        log(f"🔑 Попередній хеш повідомлення: {last_hash_message}")
+        # Завантажуємо попередні хеші
+        last_hashes = get_last_hashes()
         
-        # Порівнюємо лише важливе повідомлення
-        if last_hash_message == current_hash_message:
-            log("✅ Змін у важливому повідомленні немає. Завершення.")
+        log(f"📊 Хеш повідомлення: {current_hash_message}")
+        log(f"📊 Хеш таблиці: {current_hash_table}")
+        
+        # Перевіряємо обидві зміни
+        message_changed = last_hashes['hash_message'] != current_hash_message
+        table_changed = last_hashes['hash_table'] != current_hash_table
+        
+        if not message_changed and not table_changed:
+            log("✅ Зміни відсутні. Скріншот не потрібен.")
             return
         
-        log("🔔 ВИЯВЛЕНІ ЗМІНИ У ВАЖЛИВОМУ ПОВІДОМЛЕННІ!")
+        if message_changed:
+            log("🔔 Виявлено зміни у тексті повідомлення!")
+        if table_changed:
+            log("🔔 Виявлено зміни у таблиці/графіку!")
         
-        # Створюємо скріншот
+        # Робимо повний скріншот для відправки
         screenshot_path = take_screenshot()
         
-        # Відправляємо в канал
-        if send_to_channel(message_content, date_content, screenshot_path):
-            save_hash(message_content, date_content)
-            log("✅ Успішно! Оновлення відправлено")
+        if screenshot_path and send_to_channel(message_content, date_content, screenshot_path):
+            # Зберігаємо нові хеші
+            save_hashes(message_content, date_content, current_hash_table)
+            log("✅ Зміни успішно відправлені!")
         else:
-            log("❌ Не вдалося відправити оновлення")
-    
+            log("❌ Помилка відправки")
+            
     except Exception as e:
-        log(f"❌ Критична помилка: {e}")
-    
+        log(f"❌ Помилка: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
-        # Завжди відправляємо лог наприкінці
         send_log_to_channel()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
