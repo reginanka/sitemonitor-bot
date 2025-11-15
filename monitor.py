@@ -62,7 +62,7 @@ def get_schedule_content():
     try:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            page = browser.new_page(viewport={'width': 1920, 'height': 1080})
+            page = browser.new_page(viewport={'width': 1920, 'height': 3080})
             page.goto(URL, wait_until='networkidle', timeout=30000)
             page_content = page.content()
             browser.close()
@@ -95,7 +95,7 @@ def take_screenshot_between_elements():
         log("📸 Створюю скріншот проміжку між елементами...")
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
-            page = browser.new_page(viewport={'width': 1920, 'height': 1080})
+            page = browser.new_page(viewport={'width': 1920, 'height': 3080})
             page.goto(URL, wait_until='networkidle', timeout=30000)
             date_element = page.locator("text=/Дата оновлення інформації/").first
             end_element = page.locator("text=/робіт/").last
