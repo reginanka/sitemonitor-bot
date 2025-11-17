@@ -28,6 +28,7 @@ jobs:
       
       - name: Run monitoring script
         env:
+          URL: ${{ secrets.URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
           TELEGRAM_LOG_CHANNEL_ID: ${{ secrets.TELEGRAM_LOG_CHANNEL_ID }}
