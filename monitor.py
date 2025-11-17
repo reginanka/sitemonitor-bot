@@ -21,7 +21,7 @@ sys.excepthook = exception_hook
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID')
 TELEGRAM_LOG_CHANNEL_ID = os.environ.get('TELEGRAM_LOG_CHANNEL_ID')
-URL = 'https://www.ztoe.com.ua/unhooking-search.php'
+URL = os.environ.get('URL')
 
 UKRAINE_TZ = pytz.timezone('Europe/Kyiv')
 log_messages = []
