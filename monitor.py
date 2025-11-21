@@ -158,22 +158,22 @@ def save_data(message_content, date_content, screenshot_hash):
         }, f, indent=2, ensure_ascii=False)
     log(f"💾 Дані збережено. Хеш повідомлення: {hash_message}, Хеш скріншота: {screenshot_hash}")
 def send_to_channel(message_content, date_content, screenshot_path=None):
-    # ДІАГНОСТИКА
-    log(f"🔗 SUBSCRIBE URL: '{SUBSCRIBE}'")
-    log(f"🔗 URL: '{URL}'")
     try:
         if screenshot_path and os.path.exists(screenshot_path):
             photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
             full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n"
             full_message += message_content
             full_message += f'\n\n<a href="{URL}">🔗 Пошук черги за адресою</a>'
-        if date_content:
-            full_message += f"\n\n{date_content}\n\n"
-    # Перевіряємо SUBSCRIBE окремо
-        if SUBSCRIBE:
-        full_message += f'<a href="{SUBSCRIBE}">⚡ ПІДПИСАТИСЯ ⚡</a>'
-    else:
-        log("⚠️ SUBSCRIBE не встановлено в змінних оточення!")
+            
+            if date_content:
+                full_message += f"\n\n{date_content}\n\n"
+            
+            # Додаємо посилання SUBSCRIBE, якщо воно є
+            if SUBSCRIBE:
+                full_message += f'<a href="{SUBSCRIBE}">⚡ ПІДПИСАТИСЯ ⚡</a>'
+            else:
+                log("⚠️ SUBSCRIBE не встановлено в змінних оточення!")
+            
             with open(screenshot_path, 'rb') as photo:
                 files = {'photo': photo}
                 data = {
