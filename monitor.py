@@ -168,6 +168,8 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
             if date_content:
                 full_message += f"\n\n{date_content}\n\n"
                 full_message += f'<a href="{SUBSCRIBE}">⚡ ПІДПИСАТИСЯ ⚡</a>'
+            else:
+                log("❌ SUBSCRIBE не встановлено!")
             with open(screenshot_path, 'rb') as photo:
                 files = {'photo': photo}
                 data = {
