@@ -24,6 +24,11 @@ TELEGRAM_LOG_CHANNEL_ID = os.environ.get('TELEGRAM_LOG_CHANNEL_ID')
 URL = os.environ.get('URL')
 SUBSCRIBE = os.environ.get('SUBSCRIBE')
 
+# ДІАГНОСТИКА - додайте ці рядки:
+print(f"🔍 DEBUG: SUBSCRIBE = '{SUBSCRIBE}'")
+print(f"🔍 DEBUG: SUBSCRIBE is None? {SUBSCRIBE is None}")
+print(f"🔍 DEBUG: SUBSCRIBE bool: {bool(SUBSCRIBE)}")
+
 UKRAINE_TZ = pytz.timezone('Europe/Kyiv')
 log_messages = []
 
@@ -159,6 +164,7 @@ def save_data(message_content, date_content, screenshot_hash):
     log(f"💾 Дані збережено. Хеш повідомлення: {hash_message}, Хеш скріншота: {screenshot_hash}")
 
 def send_to_channel(message_content, date_content, screenshot_path=None):
+    log(f"🔍 DEBUG у функції: SUBSCRIBE = '{SUBSCRIBE}'")
     try:
         if screenshot_path and os.path.exists(screenshot_path):
             photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
