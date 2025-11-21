@@ -167,7 +167,7 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
             full_message += f'\n\n<a href="{URL}">🔗 Пошук черги за адресою</a>'
             if date_content:
                 full_message += f"\n\n{date_content}\n\n"
-                full_message += f'<a href="{SUBSCRIBE}">⚡ПІДПИСАТИСЯ⚡</a>'
+                full_message += f'<a href="{SUBSCRIBE}">⚡ ПІДПИСАТИСЯ ⚡</a>'
             with open(screenshot_path, 'rb') as photo:
                 files = {'photo': photo}
                 data = {
