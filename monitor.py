@@ -22,6 +22,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 TELEGRAM_CHANNEL_ID = os.environ.get('TELEGRAM_CHANNEL_ID')
 TELEGRAM_LOG_CHANNEL_ID = os.environ.get('TELEGRAM_LOG_CHANNEL_ID')
 URL = os.environ.get('URL')
+SUBSCRIBE = os.environ.get('SUBSCRIBE')
 
 UKRAINE_TZ = pytz.timezone('Europe/Kyiv')
 log_messages = []
@@ -166,6 +167,7 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
             full_message += f'\n\n<a href="{URL}">🔗 Пошук черги за адресою</a>'
             if date_content:
                 full_message += f"\n\n{date_content}"
+                full_message += f'\n\n<a href="{SUBSCRIBE}">⚡ПІДПИСАТИСЯ</a>'
             with open(screenshot_path, 'rb') as photo:
                 files = {'photo': photo}
                 data = {
