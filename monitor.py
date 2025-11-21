@@ -157,6 +157,7 @@ def save_data(message_content, date_content, screenshot_hash):
             'timestamp': datetime.now().isoformat()
         }, f, indent=2, ensure_ascii=False)
     log(f"💾 Дані збережено. Хеш повідомлення: {hash_message}, Хеш скріншота: {screenshot_hash}")
+
 def send_to_channel(message_content, date_content, screenshot_path=None):
     try:
         if screenshot_path and os.path.exists(screenshot_path):
@@ -168,7 +169,6 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
             if date_content:
                 full_message += f"\n\n{date_content}\n\n"
             
-            # Додаємо посилання SUBSCRIBE, якщо воно є
             if SUBSCRIBE:
                 full_message += f'<a href="{SUBSCRIBE}">⚡ ПІДПИСАТИСЯ ⚡</a>'
             else:
