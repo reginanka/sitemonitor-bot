@@ -164,10 +164,10 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
             photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
             full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n"
             full_message += message_content
-            full_message += f'\n\n<a href="{URL}">🔗 Переглянути графік на сайті </a>'
+            full_message += f'\n\n<a href="{URL}">🔗 Переглянути графік на сайті </a>\n\n'
             
             if date_content:
-                full_message += f"\n\n{date_content}\n\n"
+                full_message += f"{date_content}"
             
             if SUBSCRIBE:
                 full_message += f'\n\n<a href="{SUBSCRIBE}">⚡ ПІДПИСАТИСЯ ⚡</a>'
