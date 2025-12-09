@@ -72,7 +72,7 @@ def get_schedule_content():
                 br.replace_with('\n')
             important_message = None
             update_date = None
-            for elem in soup.find_all(['div', 'span', 'p', 'h2', 'h3']):
+            for elem in soup.find_all(['div', 'span', 'p', 'h2', 'h3','h4','h5']):
                 text = elem.get_text(strip=False)
                 if 'УВАГА' in text and 'ІНФОРМАЦІЯ' in text and important_message is None:
                     lines = [line.strip() for line in text.split('\n') if line.strip()]
@@ -164,10 +164,10 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
             photo_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
             full_message = f"🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ\n\n"
             full_message += message_content
-            full_message += f'\n\n<a href="{URL}">🔗 Переглянути графік на сайті </a>\n\n'
+            full_message += f'\n\n<a href="{URL}">🔗 Переглянути графік на сайті </a>'
             
             if date_content:
-                full_message += f"{date_content}\n\n"
+                full_message += f"\n\n{date_content}\n\n"
             
             if SUBSCRIBE:
                 full_message += f'\n\n<a href="{SUBSCRIBE}">⚡ ПІДПИСАТИСЯ ⚡</a>'
