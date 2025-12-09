@@ -170,7 +170,7 @@ def send_to_channel(message_content, date_content, screenshot_path=None):
                 full_message += f"{date_content}\n\n"
             
             if SUBSCRIBE:
-                full_message += f'<a href="{SUBSCRIBE}">⚡ ПІДПИСАТИСЯ ⚡</a>'
+                full_message += f'\n\n<a href="{SUBSCRIBE}">⚡ ПІДПИСАТИСЯ ⚡</a>'
             else:
                 log("⚠️ SUBSCRIBE не встановлено в змінних оточення!")
             
