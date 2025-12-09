@@ -78,7 +78,7 @@ def get_schedule_content():
                     lines = [line.strip() for line in text.split('\n') if line.strip()]
                     important_message = '\n'.join(lines)
                     log(f"✅ Знайдено повідомлення УВАГА: {important_message[:100]}...")
-                if 'Дата оновлення інформації' in text and update_date is None:
+                if 'Дата' in text and update_date is None:
                     lines = [line.strip() for line in text.split('\n') if line.strip()]
                     update_date = '\n'.join(lines)
                     log(f"✅ Знайдено дату оновлення: {update_date}")
