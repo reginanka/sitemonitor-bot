@@ -122,18 +122,24 @@ def build_state(
 ]:
     """
     Будує нормалізований стан з хешами по інтервалах.
+    ⭐ Порожні графіки отримують пустий хеш ""
     """
     norm_by_queue: Dict[str, List[Dict]] = {}
     main_hashes: Dict[str, str] = {}
     span_hashes: Dict[str, Dict[str, Dict[str, str]]] = {}
 
     for queue_key, schedule in raw_schedules.items():
-        if has_error.get(queue_key, False):
+        cherga_id, pidcherga_id = map(int, queue_key.split("."))
+        
+        # ⭐ ПОРОЖНІЙ ГРАФІК → пустий хеш
+        if has_error.get(queue_key, False) or not schedule:
+            norm_by_queue[queue_key] = []
+            main_hashes[queue_key] = ""  # ⭐ ПУСТИЙ ХЕШ
+            span_hashes[queue_key] = {}
+            log_to_buffer(f"ℹ️ {queue_key}: порожній/помилка → хеш=''")
             continue
 
-        cherga_id, pidcherga_id = map(int, queue_key.split("."))
         norm_list: List[Dict] = []
-
         for rec in schedule:
             nrec = normalize_record(rec, cherga_id, pidcherga_id)
             norm_list.append(nrec)
@@ -141,7 +147,7 @@ def build_state(
         norm_list.sort(key=lambda r: (r["date"], r["span"]))
         norm_by_queue[queue_key] = norm_list
 
-        # Головний хеш черги — від color кожного інтервалу
+        # Головний хеш черги
         main_hash_data = [{"date": r["date"], "span": r["span"], "color": r["color"]} for r in norm_list]
         main_hashes[queue_key] = calculate_hash(main_hash_data)
 
@@ -191,7 +197,6 @@ def parse_span(span: str) -> Tuple[str, str]:
     if not span or "-" not in span:
         return ("", "")
     start, end = span.split("-")
-    # Якщо вже є двокрапка, повертаємо як є
     if ":" in start:
         return start, end
     return f"{start[:2]}:{start[2:]}", f"{end[:2]}:{end[2:]}"
@@ -234,6 +239,13 @@ def build_diff(
     span_hashes: Dict[str, Dict[str, Dict[str, str]]],
     last_state: Dict,
 ) -> Dict:
+    """
+    ⭐ Логіка:
+    1. None → ігнор (ініціалізація)
+    2. "" → "" → ігнор (порожній)
+    3. "" → дані → НОВИЙ ГРАФІК!
+    4. дані → дані+зміни → ОНОВЛЕННЯ!
+    """
     last_main = last_state.get("main_hashes", {})
     last_span = last_state.get("span_hashes", {})
     last_norm = last_state.get("norm_by_queue", {})
@@ -241,86 +253,79 @@ def build_diff(
     diff = {
         "queues": [],
         "per_queue": {},
-        "new_dates": [],  # Глобальний список нових дат
+        "new_dates": [],
+        "from_empty_queues": [],  # ⭐ З порожнього → повний
     }
 
     for queue_key, cur_main_hash in main_hashes.items():
+        cur_records = norm_by_queue.get(queue_key, [])
         old_main_hash = last_main.get(queue_key)
         
+        # ⭐ КЕЙС 1: Ініціалізація (немає історії)
         if old_main_hash is None:
-            log_to_buffer(f"ℹ️ Перший запуск для {queue_key}, пропускаємо")
+            log_to_buffer(f"ℹ️ Ініціалізація {queue_key} ({len(cur_records)} записів)")
             continue
         
-        if old_main_hash == cur_main_hash:
+        # ⭐ КЕЙС 2: Зараз порожній
+        if not cur_records:
+            log_to_buffer(f"ℹ️ Порожній {queue_key}")
             continue
-
-        # Є зміни — шукаємо деталі
-        log_to_buffer(f"🔍 Аналізую зміни для {queue_key}")
-
-        cur_sh = span_hashes.get(queue_key, {})
-        old_sh = last_span.get(queue_key, {})
         
-        if not old_sh:
-            log_to_buffer(f"ℹ️ Немає попередніх span_hashes для {queue_key}, пропускаємо")
-            continue
-
-        new_dates = sorted(d for d in cur_sh.keys() if d not in old_sh)
-        if new_dates:
-            log_to_buffer(f" 📅 Нові дати: {new_dates}")
-            # Додаємо до глобального списку
-            for nd in new_dates:
-                if nd not in diff["new_dates"]:
-                    diff["new_dates"].append(nd)
-        
-        changed_dates = {}
-        cur_items = norm_by_queue.get(queue_key, [])
-        old_items_list = last_norm.get(queue_key, [])
-
-        for d in cur_sh.keys():
-            if d in new_dates:
-                continue
-            
-            # Порівнюємо хеші інтервалів для цієї дати
-            cur_spans = cur_sh.get(d, {})
-            old_spans = old_sh.get(d, {})
-            
-            changes_for_date = []
-            
-            for span, cur_span_hash in cur_spans.items():
-                old_span_hash = old_spans.get(span)
-                if old_span_hash == cur_span_hash:
-                    continue
-                
-                # Хеш інтервалу змінився
-                log_to_buffer(f" 🔄 Інтервал {span} дата {d}: хеш змінився")
-                
-                # Знаходимо старий і новий запис
-                new_rec = next((r for r in cur_items if r["date"] == d and r["span"] == span), None)
-                old_rec = next((r for r in old_items_list if r["date"] == d and r["span"] == span), None)
-                
-                if new_rec and old_rec:
-                    log_to_buffer(f" Старий: color={old_rec['color']}, Новий: color={new_rec['color']}")
-                    if new_rec["color"] != old_rec["color"]:
-                        change = "added" if new_rec["color"] == "red" else "removed"
-                        changes_for_date.append({"span": span, "change": change})
-                        log_to_buffer(f" ✅ Зміна: {change}")
-                else:
-                    log_to_buffer(f" ⚠️ Не знайдено запис: new_rec={bool(new_rec)}, old_rec={bool(old_rec)}")
-
-            if changes_for_date:
-                grouped = group_spans(changes_for_date)
-                changed_dates[d] = grouped
-                log_to_buffer(f" ✅ Для дати {d} знайдено {len(changes_for_date)} змін")
-
-        if new_dates or changed_dates:
+        # ⭐ КЕЙС 3: БУВ ПОРОЖНІЙ → ЗАРАЗ Є → НОВИЙ ГРАФІК!
+        if old_main_hash == "" and cur_main_hash != "":
+            log_to_buffer(f"🎉 {queue_key}: З'ЯВИВСЯ ГРАФІК з нуля!")
+            diff["from_empty_queues"].append(queue_key)
             diff["queues"].append(queue_key)
+            new_dates = list(span_hashes.get(queue_key, {}).keys())
+            diff["new_dates"].extend(new_dates)
             diff["per_queue"][queue_key] = {
                 "new_dates": new_dates,
-                "changed_dates": changed_dates,
+                "changed_dates": {},
             }
-            log_to_buffer(f"✅ Додано {queue_key} до diff")
-        else:
-            log_to_buffer(f"⚠️ Хеш змінився для {queue_key}, але конкретні зміни не виявлені")
+            continue
+        
+        # ⭐ КЕЙС 4: Зміна хешу → детальний аналіз
+        if old_main_hash != cur_main_hash:
+            log_to_buffer(f"🔍 Зміни в {queue_key}")
+            
+            cur_sh = span_hashes.get(queue_key, {})
+            old_sh = last_span.get(queue_key, {})
+            
+            new_dates = sorted(d for d in cur_sh.keys() if d not in old_sh)
+            changed_dates = {}
+            cur_items = norm_by_queue.get(queue_key, [])
+            old_items_list = last_norm.get(queue_key, [])
+
+            for d in cur_sh.keys():
+                if d in new_dates:
+                    continue
+                
+                cur_spans = cur_sh.get(d, {})
+                old_spans = old_sh.get(d, {})
+                changes_for_date = []
+                
+                for span, cur_span_hash in cur_spans.items():
+                    old_span_hash = old_spans.get(span)
+                    if old_span_hash == cur_span_hash:
+                        continue
+                    
+                    new_rec = next((r for r in cur_items if r["date"] == d and r["span"] == span), None)
+                    old_rec = next((r for r in old_items_list if r["date"] == d and r["span"] == span), None)
+                    
+                    if new_rec and old_rec and new_rec["color"] != old_rec["color"]:
+                        change = "added" if new_rec["color"] == "red" else "removed"
+                        changes_for_date.append({"span": span, "change": change})
+
+                if changes_for_date:
+                    changed_dates[d] = group_spans(changes_for_date)
+
+            if new_dates or changed_dates:
+                diff["queues"].append(queue_key)
+                diff["per_queue"][queue_key] = {
+                    "new_dates": new_dates,
+                    "changed_dates": changed_dates,
+                }
+                diff["new_dates"].extend(new_dates)
 
     return diff
 
@@ -332,8 +337,6 @@ def build_changes_notification(
     update_str: str
 ) -> str:
     """Повідомлення про зміни в ІСНУЮЧИХ датах"""
-    
-    # Беремо тільки черги що мають changed_dates
     queues_with_changes = []
     for q in sorted(diff["queues"]):
         info = diff["per_queue"].get(q, {})
@@ -343,28 +346,25 @@ def build_changes_notification(
     if not queues_with_changes:
         return ""
     
-    queues = queues_with_changes
-    
     parts = []
-    parts.append(f"Для черг {', '.join(queues)} 🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ!")
-    parts.append("⬇️⬇️⬇️\n")
+    parts.append(f"Для черг {', '.join(queues_with_changes)} 🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ!")
+    parts.append("⬇️⬇️⬇️
+")
     
     # Дата оновлення
     update_date_str = ""
     if update_str:
         import re
-        match = re.search(r'(\d{2}:\d{2})\s+(\d{2}\.\d{2})\.\d{4}', update_str)
+        match = re.search(r'(d{2}:d{2})s+(d{2}.d{2}).d{4}', update_str)
         if match:
             update_date_str = f"🕐 {match.group(1)} {match.group(2)}"
     
-    # Збираємо тільки дати зі ЗМІНАМИ (не нові)
     dates_with_changes = set()
-    for q in queues:
+    for q in queues_with_changes:
         info = diff["per_queue"].get(q, {})
         for d in info.get("changed_dates", {}).keys():
             dates_with_changes.add(d)
     
-    # Обробляємо кожну дату
     for date in sorted(dates_with_changes):
         try:
             dt = datetime.strptime(date, "%Y-%m-%d")
@@ -372,9 +372,10 @@ def build_changes_notification(
         except ValueError:
             formatted_date = date
         
-        parts.append(f"🗓 {formatted_date}\n")
+        parts.append(f"🗓 {formatted_date}
+")
         
-        for queue_key in sorted(queues, key=lambda x: tuple(map(int, x.split(".")))):
+        for queue_key in sorted(queues_with_changes, key=lambda x: tuple(map(int, x.split(".")))):
             queue_info = diff["per_queue"].get(queue_key, {})
             
             if date not in queue_info.get("changed_dates", {}):
@@ -397,11 +398,11 @@ def build_changes_notification(
                     action = "🔋 скасували відключення"
                     parts.append(f"<s>{start}-{end}</s> {action}")
             
-            parts.append("")  # ВИПРАВЛЕННЯ: Порожній рядок після КОЖНОЇ черги
+            parts.append("")
         
-        parts.append("======\n")
+        parts.append("======
+")
     
-    # Посилання
     parts.append(
         f'<a href="{url}">🔗 Переглянути графік</a> | '
         f'<a href="{subscribe}">⚡️ ПІДПИСАТИСЯ</a>'
@@ -409,7 +410,9 @@ def build_changes_notification(
     if update_date_str:
         parts.append(update_date_str)
     
-    return "\n".join(parts)
+    return "
+".join(parts)
+
 
 def build_new_schedule_notification(
     diff: Dict,
@@ -419,8 +422,6 @@ def build_new_schedule_notification(
     update_str: str
 ) -> str:
     """Компактне повідомлення про НОВИЙ графік"""
-
-    # Беремо тільки черги що мають нові дати
     queues_with_new_dates = []
     for q in sorted(diff["queues"]):
         info = diff["per_queue"].get(q, {})
@@ -432,27 +433,26 @@ def build_new_schedule_notification(
 
     parts = []
     parts.append("🔔 Додано новий графік на завтра!")
-    parts.append("⬇️⬇️⬇️\n")
+    parts.append("⬇️⬇️⬇️
+")
 
-    # Дата оновлення
     update_date_str = ""
     if update_str:
         import re
-        match = re.search(r'(\d{2}:\d{2})\s+(\d{2}\.\d{2})\.\d{4}', update_str)
+        match = re.search(r'(d{2}:d{2})s+(d{2}.d{2}).d{4}', update_str)
         if match:
             update_date_str = f"🕐 {match.group(1)} {match.group(2)}"
 
-    # Обробляємо тільки НОВІ дати
-    for date in sorted(diff.get("new_dates", [])):
+    for date in sorted(set(diff.get("new_dates", []))):
         try:
             dt = datetime.strptime(date, "%Y-%m-%d")
             formatted_date = dt.strftime("%d.%m.%Y")
         except ValueError:
             formatted_date = date
 
-        parts.append(f"🗓 {formatted_date}\n")
+        parts.append(f"🗓 {formatted_date}
+")
 
-        # Отримуємо всі черги що мають відключення на цю дату
         for queue_key in sorted(
             queues_with_new_dates, key=lambda x: tuple(map(int, x.split(".")))
         ):
@@ -467,7 +467,6 @@ def build_new_schedule_notification(
                     [{"span": o["span"], "change": "added"} for o in outages]
                 )
 
-                # Форматуємо часи компактно
                 time_ranges = []
                 for g in grouped:
                     start = g["start"].lstrip("0") or "0:00"
@@ -479,46 +478,45 @@ def build_new_schedule_notification(
                     time_ranges.append(f"{start}-{end}")
 
                 times_str = ", ".join(time_ranges)
-                parts.append(f"Черга {queue_key}: \n🪫{times_str}")
-                parts.append("")  # Порожній рядок після КОЖНОЇ черги
+                parts.append(f"Черга {queue_key}: 
+🪫{times_str}")
+                parts.append("")
 
-        parts.append("")  # Додатковий відступ після всіх черг дати
+        parts.append("")
 
-    # Посилання
     parts.append(
         f'<a href="{url}">🔗 Переглянути графік</a> | '
-        f'<a href="{subscribe}">⚡️ ПІДПИСАТИСЯ </a>'
+        f'<a href="{subscribe}">⚡️ ПІДПИСАТИСЯ</a>'
     )
     if update_date_str:
         parts.append(update_date_str)
 
-    return "\n".join(parts)
-
+    return "
+".join(parts)
 
 
 def send_notification_safe(message: str, img_path=None) -> bool:
     """Надсилає повідомлення з перевіркою лімітів Telegram"""
-    CAPTION_LIMIT = 1024  # Ліміт для caption з фото
-    TEXT_LIMIT = 4096     # Ліміт для звичайного text повідомлення
+    CAPTION_LIMIT = 1024
+    TEXT_LIMIT = 4096
     
     msg_len = len(message)
     log_to_buffer(f"📝 Довжина повідомлення: {msg_len} символів")
     
-    # Якщо є фото і текст не влазить в caption
     if img_path and msg_len > CAPTION_LIMIT:
-        log_to_buffer(f"⚠️ Текст {msg_len} > {CAPTION_LIMIT} (ліміт caption), надсилаю спочатку фото, потім текст")
-        # Спочатку надсилаємо фото без тексту
+        log_to_buffer(f"⚠️ Текст {msg_len} > {CAPTION_LIMIT}, надсилаю фото+текст окремо")
         send_notification("📸", img_path)
-        # Потім надсилаємо текст окремим повідомленням
         if msg_len > TEXT_LIMIT:
-            log_to_buffer(f"⚠️ Текст {msg_len} > {TEXT_LIMIT}, обрізаю")
-            message = message[:TEXT_LIMIT-100] + "\n\n... (текст скорочено)"
+            message = message[:TEXT_LIMIT-100] + "
+
+... (текст скорочено)"
         return send_notification(message, None)
     
-    # Якщо немає фото, але текст завеликий для text повідомлення
     if not img_path and msg_len > TEXT_LIMIT:
         log_to_buffer(f"⚠️ Текст {msg_len} > {TEXT_LIMIT}, обрізаю")
-        message = message[:TEXT_LIMIT-100] + "\n\n... (текст скорочено)"
+        message = message[:TEXT_LIMIT-100] + "
+
+... (текст скорочено)"
     
     return send_notification(message, img_path)
 
@@ -530,9 +528,17 @@ def main():
     log_to_buffer("=" * 60)
 
     try:
-        # 1. Завантажити графіки з API
+        # ⭐ Ініціалізація порожніх файлів
+        if not HASH_FILE.exists():
+            save_state({}, {}, timestamp)
+            log_to_buffer("🆕 Створено порожній last_hash.json")
+        if not PREVIOUS_FILE.exists():
+            save_json({}, PREVIOUS_FILE)
+            log_to_buffer("🆕 Створено порожній previous.json")
+
+        # 1. Завантажити графіки
         current_schedules, has_error = fetch_all_schedules()
-        if not current_schedules:
+        if not any(not has_error[q] and current_schedules[q] for q in current_schedules):
             log_to_buffer("❌ Не вдалось завантажити жоден графік")
             return
 
@@ -540,119 +546,66 @@ def main():
         norm_by_queue, current_main_hashes, current_span_hashes = build_state(
             current_schedules, has_error
         )
-        log_to_buffer(f"🔐 Витягнено хеші для {len(current_main_hashes)} черг")
+        log_to_buffer(f"🔐 Хеші для {len(current_main_hashes)} черг")
 
-        # 3. Зберегти поточні нормалізовані дані
+        # 3. Зберегти поточні дані
         if CURRENT_FILE.exists():
             shutil.copy(CURRENT_FILE, PREVIOUS_FILE)
-            log_to_buffer("📋 Попередній current.json скопійовано в previous.json")
-        
         save_json(norm_by_queue, CURRENT_FILE)
-        log_to_buffer("💾 Нормалізовані дані збережено в data/current.json")
+        log_to_buffer("💾 Дані збережено")
 
         # 4. Завантажити попередній стан
         last_state = load_last_state()
-        log_to_buffer("📋 Завантажено попередній стан")
 
         # 5. Побудувати diff
         diff = build_diff(norm_by_queue, current_main_hashes, current_span_hashes, last_state)
 
-        if not diff["queues"] and not diff["new_dates"]:
-            log_to_buffer("✅ Дані по всіх чергах не змінилися")
+        # ⭐ 6. Чітка перевірка реальних змін
+        real_changes = (diff["queues"] or 
+                       diff.get("from_empty_queues", []))
+        
+        if not real_changes:
+            log_to_buffer("✅ Все стабільно")
             save_state(current_main_hashes, current_span_hashes, timestamp)
             return
 
-        log_to_buffer(f"🔔 Зміни виявлено для: {', '.join(diff['queues'])}")
+        log_to_buffer(f"🔔 Зміни: {len(diff['queues'])} черг, "
+                     f"з нуля: {len(diff.get('from_empty_queues', []))}")
 
-        # 6. Отримати дату оновлення з сайту
+        # 7. Отримати контент сайту
         _, date_content = get_schedule_content()
+        screenshot_path, _ = take_screenshot_between_elements()
+        img_path = Path(screenshot_path) if screenshot_path else None
 
-        # 7. Скріншот із сайту
-        screenshot_path, screenshot_hash = take_screenshot_between_elements()
-        if not screenshot_path:
-            log_to_buffer("⚠️ Не вдалося створити скріншот")
-
-        from pathlib import Path as _Path
-        img_path = _Path(screenshot_path) if screenshot_path else None
-
-        # 8. Визначаємо типи змін
-        has_new_dates = bool(diff.get("new_dates"))
-        has_changes = any(
-            q_info.get("changed_dates") 
-            for q_info in diff["per_queue"].values()
-        )
-
-        # 9. Логіка відправки повідомлень з фото
-        
-        # Випадок 1: Є ТІЛЬКИ зміни (без нових дат)
-        # -> Надсилаємо повідомлення про зміни + фото
-        if has_changes and not has_new_dates:
-            log_to_buffer("📤 Надсилаю повідомлення про зміни + фото")
-            changes_msg = build_changes_notification(
-                diff, URL, SUBSCRIBE, date_content or ""
-            )
-            if changes_msg:
-                ok = send_notification_safe(changes_msg, img_path)
-                if ok:
-                    log_to_buffer("✅ Повідомлення про зміни відправлено")
-                else:
-                    log_to_buffer("❌ Помилка надсилання повідомлення про зміни")
-            else:
-                log_to_buffer("⚠️ Немає черг зі змінами для відправки")
-        
-        # Випадок 2: Є ТІЛЬКИ новий графік (без змін)
-        # -> Надсилаємо повідомлення про новий графік + фото
-        elif has_new_dates and not has_changes:
-            log_to_buffer("📤 Надсилаю повідомлення про новий графік + фото")
-            new_msg = build_new_schedule_notification(
+        # ⭐ 8. Пріоритет повідомлень
+        msg = ""
+        if diff.get("from_empty_queues"):
+            log_to_buffer("🚀 'Новий графік!' (з порожнього)")
+            msg = build_new_schedule_notification(
                 diff, norm_by_queue, URL, SUBSCRIBE, date_content or ""
             )
-            if new_msg:
-                ok = send_notification_safe(new_msg, img_path)
-                if ok:
-                    log_to_buffer("✅ Повідомлення про новий графік відправлено")
-                else:
-                    log_to_buffer("❌ Помилка надсилання повідомлення про новий графік")
-            else:
-                log_to_buffer("⚠️ Немає черг з новими датами для відправки")
-        
-        # Випадок 3: Є І зміни, І новий графік
-        # -> Надсилаємо два повідомлення: 
-        #    1) зміни + фото
-        #    2) новий графік без фото
-        elif has_changes and has_new_dates:
-            log_to_buffer("📤 Надсилаю повідомлення про зміни + фото")
-            changes_msg = build_changes_notification(
-                diff, URL, SUBSCRIBE, date_content or ""
-            )
-            if changes_msg:
-                ok1 = send_notification_safe(changes_msg, img_path)
-                if ok1:
-                    log_to_buffer("✅ Повідомлення про зміни відправлено")
-                else:
-                    log_to_buffer("❌ Помилка надсилання повідомлення про зміни")
-            
-            log_to_buffer("📤 Надсилаю повідомлення про новий графік (без фото)")
-            new_msg = build_new_schedule_notification(
+        elif diff.get("new_dates"):
+            log_to_buffer("🆕 'Новий графік на завтра!'")
+            msg = build_new_schedule_notification(
                 diff, norm_by_queue, URL, SUBSCRIBE, date_content or ""
             )
-            if new_msg:
-                ok2 = send_notification_safe(new_msg, None)  # БЕЗ фото
-                if ok2:
-                    log_to_buffer("✅ Повідомлення про новий графік відправлено")
-                else:
-                    log_to_buffer("❌ Помилка надсилання повідомлення про новий графік")
+        else:
+            log_to_buffer("🔄 'Оновлення графіку!'")
+            msg = build_changes_notification(
+                diff, URL, SUBSCRIBE, date_content or ""
+            )
 
-        # 10. Оновити тільки хеші
+        if msg:
+            log_to_buffer("📤 Надсилаю повідомлення + фото")
+            send_notification_safe(msg, img_path)
+        else:
+            log_to_buffer("⚠️ Повідомлення порожнє")
+
+        # 9. Зберегти стан
         save_state(current_main_hashes, current_span_hashes, timestamp)
-        log_to_buffer("💾 Хеші оновлено в data/last_hash.json")
+        log_to_buffer("✅ Кінець")
 
     except Exception as e:
-        log_to_buffer(f"❌ Критична помилка: {e}")
-    finally:
-        send_log_to_channel()
-        log_to_buffer("🏁 Завершення роботи скрипта")
-
-
-if __name__ == "__main__":
-    main()
+        log_to_buffer(f"💥 Критична помилка: {e}")
+        import traceback
+        log_to_buffer(t
