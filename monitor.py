@@ -403,7 +403,7 @@ def build_changes_notification(
     
     # Посилання
     parts.append(
-        f'<a href="{url}">🔗 Переглянути графік</a> | '
+        f'<a href="{url}">🔗 Сайт "ЖОЕ"</a> | '
         f'<a href="{subscribe}">⚡️ ПІДПИСАТИСЯ</a>'
     )
     if update_date_str:
@@ -431,7 +431,7 @@ def build_new_schedule_notification(
         return ""
 
     parts = []
-    parts.append("🔔 Додано новий графік на завтра!")
+    parts.append("🔔 Додано новий графік!")
     parts.append("⬇️⬇️⬇️\n")
 
     # Дата оновлення
@@ -486,7 +486,7 @@ def build_new_schedule_notification(
 
     # Посилання
     parts.append(
-        f'<a href="{url}">🔗 Переглянути графік</a> | '
+        f'<a href="{url}">🔗 Сайт "ЖОЕ"</a> | '
         f'<a href="{subscribe}">⚡️ ПІДПИСАТИСЯ </a>'
     )
     if update_date_str:
