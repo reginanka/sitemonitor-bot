@@ -348,14 +348,13 @@ def build_changes_notification(
     
     parts = []
     parts.append(f"Для черг {', '.join(queues_with_changes)} 🔔 ОНОВЛЕННЯ ГРАФІКА ВІДКЛЮЧЕНЬ!")
-    parts.append("⬇️⬇️⬇️
-")
+    parts.append("⬇️⬇️⬇️\n")
     
     # Дата оновлення
     update_date_str = ""
     if update_str:
         import re
-        match = re.search(r'(d{2}:d{2})s+(d{2}.d{2}).d{4}', update_str)
+        match = re.search(r'(\d{2}:\d{2})\s+(\d{2}\.\d{2})\.\d{4}', update_str)
         if match:
             update_date_str = f"🕐 {match.group(1)} {match.group(2)}"
     
@@ -372,8 +371,7 @@ def build_changes_notification(
         except ValueError:
             formatted_date = date
         
-        parts.append(f"🗓 {formatted_date}
-")
+        parts.append(f"🗓 {formatted_date}\n")
         
         for queue_key in sorted(queues_with_changes, key=lambda x: tuple(map(int, x.split(".")))):
             queue_info = diff["per_queue"].get(queue_key, {})
@@ -400,8 +398,7 @@ def build_changes_notification(
             
             parts.append("")
         
-        parts.append("======
-")
+        parts.append("======\n")
     
     parts.append(
         f'<a href="{url}">🔗 Переглянути графік</a> | '
@@ -410,8 +407,7 @@ def build_changes_notification(
     if update_date_str:
         parts.append(update_date_str)
     
-    return "
-".join(parts)
+    return "\n".join(parts)
 
 
 def build_new_schedule_notification(
@@ -433,13 +429,12 @@ def build_new_schedule_notification(
 
     parts = []
     parts.append("🔔 Додано новий графік на завтра!")
-    parts.append("⬇️⬇️⬇️
-")
+    parts.append("⬇️⬇️⬇️\n")
 
     update_date_str = ""
     if update_str:
         import re
-        match = re.search(r'(d{2}:d{2})s+(d{2}.d{2}).d{4}', update_str)
+        match = re.search(r'(\d{2}:\d{2})\s+(\d{2}\.\d{2})\.\d{4}', update_str)
         if match:
             update_date_str = f"🕐 {match.group(1)} {match.group(2)}"
 
@@ -450,8 +445,7 @@ def build_new_schedule_notification(
         except ValueError:
             formatted_date = date
 
-        parts.append(f"🗓 {formatted_date}
-")
+        parts.append(f"🗓 {formatted_date}\n")
 
         for queue_key in sorted(
             queues_with_new_dates, key=lambda x: tuple(map(int, x.split(".")))
@@ -478,8 +472,7 @@ def build_new_schedule_notification(
                     time_ranges.append(f"{start}-{end}")
 
                 times_str = ", ".join(time_ranges)
-                parts.append(f"Черга {queue_key}: 
-🪫{times_str}")
+                parts.append(f"Черга {queue_key}: \n🪫{times_str}")
                 parts.append("")
 
         parts.append("")
@@ -491,8 +484,7 @@ def build_new_schedule_notification(
     if update_date_str:
         parts.append(update_date_str)
 
-    return "
-".join(parts)
+    return "\n".join(parts)
 
 
 def send_notification_safe(message: str, img_path=None) -> bool:
@@ -507,16 +499,12 @@ def send_notification_safe(message: str, img_path=None) -> bool:
         log_to_buffer(f"⚠️ Текст {msg_len} > {CAPTION_LIMIT}, надсилаю фото+текст окремо")
         send_notification("📸", img_path)
         if msg_len > TEXT_LIMIT:
-            message = message[:TEXT_LIMIT-100] + "
-
-... (текст скорочено)"
+            message = message[:TEXT_LIMIT-100] + "\n\n... (текст скорочено)"
         return send_notification(message, None)
     
     if not img_path and msg_len > TEXT_LIMIT:
         log_to_buffer(f"⚠️ Текст {msg_len} > {TEXT_LIMIT}, обрізаю")
-        message = message[:TEXT_LIMIT-100] + "
-
-... (текст скорочено)"
+        message = message[:TEXT_LIMIT-100] + "\n\n... (текст скорочено)"
     
     return send_notification(message, img_path)
 
@@ -608,4 +596,8 @@ def main():
     except Exception as e:
         log_to_buffer(f"💥 Критична помилка: {e}")
         import traceback
-        log_to_buffer(t
+        log_to_buffer(traceback.format_exc())
+
+
+if __name__ == "__main__":
+    main()
