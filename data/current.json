@@ -680,7 +680,7 @@
       "queue_key": "1.2",
       "date": "25.12.2025",
       "span": "18:00-18:30",
-      "color": "red"
+      "color": "white"
     },
     {
       "cherga": 1,
@@ -688,7 +688,7 @@
       "queue_key": "1.2",
       "date": "25.12.2025",
       "span": "18:30-19:00",
-      "color": "red"
+      "color": "white"
     },
     {
       "cherga": 1,
@@ -696,7 +696,7 @@
       "queue_key": "1.2",
       "date": "25.12.2025",
       "span": "19:00-19:30",
-      "color": "red"
+      "color": "white"
     },
     {
       "cherga": 1,
@@ -704,7 +704,7 @@
       "queue_key": "1.2",
       "date": "25.12.2025",
       "span": "19:30-20:00",
-      "color": "red"
+      "color": "white"
     },
     {
       "cherga": 1,
@@ -3374,7 +3374,7 @@
       "queue_key": "5.1",
       "date": "25.12.2025",
       "span": "17:30-18:00",
-      "color": "red"
+      "color": "white"
     },
     {
       "cherga": 5,
