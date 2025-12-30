@@ -1,8 +1,9 @@
+[file:79]
 name: Monitor Schedule Updates
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -10,38 +11,44 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
+    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          python -m playwright install chromium --with-deps
-
-      - name: Run monitoring script
-        env:
-          API_BASE_URL: ${{ secrets.API_BASE_URL }}
-          URL: ${{ secrets.URL }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-          TELEGRAM_LOG_CHANNEL_ID: ${{ secrets.TELEGRAM_LOG_CHANNEL_ID }}
-          SUBSCRIBE: ${{ secrets.SUBSCRIBE }}
-        run: python monitor.py
-
-      - name: Commit changes
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add data/current.json data/last_hash.json || true
-          git diff --quiet && git diff --staged --quiet || git commit -m "Update schedule [skip ci]"
-
-      - name: Push changes
-        run: git push || true
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run monitor
+      env:
+        API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        URL: ${{ secrets.URL }}
+        SUBSCRIBE: ${{ secrets.SUBSCRIBE }}
+        TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+        TELEGRAM_LOG_CHANNEL_ID: ${{ secrets.TELEGRAM_LOG_CHANNEL_ID }}
+      run: python monitor.py
+    
+    - name: Commit changes
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "github-actions[bot]"
+        git add data/ || true
+        git diff --quiet || git commit -m "Update schedules [skip ci]"
+        git push || true
+      continue-on-error: true
+    
+    - name: Upload logs (завжди)
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: logs-${{ github.run_id }}
+        path: monitor.log
+        retention-days: 7
