@@ -1,9 +1,11 @@
 import os
-import io
 from datetime import datetime
 from typing import List
 import pytz
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import time
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_LOG_CHANNEL_ID = os.getenv("TELEGRAM_LOG_CHANNEL_ID")
@@ -16,84 +18,58 @@ def get_ukraine_time() -> datetime:
 
 def log_to_buffer(message: str) -> None:
     ts = get_ukraine_time().strftime("%H:%M:%S")
-    line = f"{ts} - {message}"
-    print(line)
-    log_messages.append(line)
+    log_messages.append(f"{ts} - {message}")
 
-def send_log_to_channel() -> None:
-    if not TELEGRAM_LOG_CHANNEL_ID or not TELEGRAM_BOT_TOKEN or not log_messages:
+def save_logs_to_file():
+    """Зберігає логи у файл для GitHub Artifacts"""
+    try:
+        with open('monitor.log', 'w', encoding='utf-8') as f:
+            f.write('\n'.join(log_messages) + '\n')
+        print("💾 Логи збережено в monitor.log")
+    except Exception:
+        pass
+
+def send_log_to_channel():
+    """Спроба відправити в Telegram + fallback на файл"""
+    if not TELEGRAM_LOG_CHANNEL_ID or not TELEGRAM_BOT_TOKEN:
+        save_logs_to_file()
         return
     
+    text = format_log_message()
+    
+    # Retry з проксі для України
+    session = requests.Session()
+    retry_strategy = Retry(total=3, backoff_factor=2, status_forcelist=[502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry_strategy)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    data = {
+        "chat_id": TELEGRAM_LOG_CHANNEL_ID,
+        "text": text,
+        "parse_mode": "HTML",
+    }
+    
     try:
-        # Формуємо повний текст логу
-        header = "📊 ЛОГ ВИКОНАННЯ СКРИПТА\n\n"
-        footer = (
-            f"\n\n⏰ Завершено: "
-            f"{get_ukraine_time().strftime('%d.%m.%Y %H:%M:%S')} (Київський час)"
-        )
-        log_body = "\n".join(log_messages)
-        full_text = header + f"<pre>{log_body}</pre>" + footer
-        
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        
-        # Перевіряємо розмір
-        if len(full_text) <= 4000:
-            # Відправляємо одним повідомленням
-            data = {
-                "chat_id": TELEGRAM_LOG_CHANNEL_ID,
-                "text": full_text,
-                "parse_mode": "HTML",
-            }
-            requests.post(url, data=data, timeout=10)
-        else:
-            # Розбиваємо на частини
-            lines = log_messages
-            max_chunk_size = 3800  # Залишаємо місце для header та нумерації
-            current_chunk = []
-            current_size = 0
-            part_num = 1
-            
-            for line in lines:
-                line_size = len(line) + 1  # +1 для \n
-                
-                if current_size + line_size > max_chunk_size and current_chunk:
-                    # Відправляємо поточну частину
-                    chunk_body = "\n".join(current_chunk)
-                    chunk_text = (
-                        f"{header}📋 Частина {part_num}\n\n"
-                        f"<pre>{chunk_body}</pre>"
-                        f"{footer}"
-                    )
-                    data = {
-                        "chat_id": TELEGRAM_LOG_CHANNEL_ID,
-                        "text": chunk_text,
-                        "parse_mode": "HTML",
-                    }
-                    requests.post(url, data=data, timeout=10)
-                    
-                    # Скидаємо буфер
-                    current_chunk = [line]
-                    current_size = line_size
-                    part_num += 1
-                else:
-                    current_chunk.append(line)
-                    current_size += line_size
-            
-            # Відправляємо останню частину
-            if current_chunk:
-                chunk_body = "\n".join(current_chunk)
-                chunk_text = (
-                    f"{header}📋 Частина {part_num}\n\n"
-                    f"<pre>{chunk_body}</pre>"
-                    f"{footer}"
-                )
-                data = {
-                    "chat_id": TELEGRAM_LOG_CHANNEL_ID,
-                    "text": chunk_text,
-                    "parse_mode": "HTML",
-                }
-                requests.post(url, data=data, timeout=10)
-                
+        response = session.post(url, data=data, timeout=20)
+        response.raise_for_status()
+        print("📤 Лог відправлено в Telegram")
     except Exception as e:
-        # Логуємо помилку в консоль, але не падаємо
-        print(f"❌ Помилка відправки логу в Telegram: {e}")
+        print(f"❌ Telegram недоступний: {e}")
+        save_logs_to_file()  # Fallback
+
+def format_log_message() -> str:
+    current_time = get_ukraine_time()
+    header = f"""📊 ЛОГ ВИКОНАННЯ СКРИПТА
+
+{("="*60)}
+🚀 СТАРТ [{current_time.strftime("%Y-%m-%d %H:%M:%S")}]"""
+    
+    logs_html = "<pre>" + "\n".join(log_messages) + "</pre>"
+    
+    footer = f"""
+{("="*60)}
+⏰ Завершено: {current_time.strftime("%d.%m.%Y %H:%M:%S")} (Київський час)"""
+    
+    return f"{header}\n\n{logs_html}\n\n{footer}"
